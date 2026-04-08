@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#0A0A0C">
+<meta name="description" content="SheetSnap — Universal Character Sheet Scanner by DigiRune Studios">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="SheetSnap">
+<title>SheetSnap — DigiRune Studios</title>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=EB+Garamond:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0A0A0C;font-family:'EB Garamond',Georgia,serif;color:#F2E8D4;overflow-x:hidden;-webkit-tap-highlight-color:transparent}
+body,div,button,span,input,p{transition:background-color 0.25s ease,color 0.25s ease,border-color 0.25s ease}
+input,button{font-family:inherit}
+#root{min-height:100vh}
+@keyframes fadeIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script type="text/babel">
+const {useState,useRef,useEffect} = React;
+
+/* ━━━━ CONFIG ━━━━ */
+// Replace with your Cloudflare Worker URL when ready
+const API_URL = 'https://sheetsnap-api.will-6d6.workers.dev';
+
+/* ━━━━ STORAGE ━━━━ */
+const store = {
+  get: k => { try { const v=localStorage.getItem(k); return v?JSON.parse(v):null } catch(e){ return null }},
+  set: (k,v) => { try { localStorage.setItem(k,JSON.stringify(v));return true } catch(e){ if(e.name==="QuotaExceededError"||e.code===22){store._full=true}return false }},
+  _full:false,
+};
+
+/* ━━━━ THEMES ━━━━ */
+const THEMES = {
+  darkGold:{name:"Dark Gold",icon:"#D4A843",bg:"#0A0A0C",surface:"#131316",border:"rgba(212,168,67,0.10)",borderLight:"rgba(212,168,67,0.18)",accent:"#D4A843",accentBright:"#F0CC6B",accentDim:"#A88A3D",accentFaint:"rgba(212,168,67,0.06)",text:"#F2E8D4",textSoft:"rgba(242,232,212,0.85)",textMuted:"rgba(242,232,212,0.45)",green:"#5BBA6F",yellow:"#E5A538"},
+  silverIce:{name:"Silver & Ice",icon:"#8AB4CC",bg:"#080B0E",surface:"#0F1318",border:"rgba(138,180,204,0.10)",borderLight:"rgba(138,180,204,0.18)",accent:"#8AB4CC",accentBright:"#B0D4E8",accentDim:"#6A94AC",accentFaint:"rgba(138,180,204,0.06)",text:"#E0E8EF",textSoft:"rgba(224,232,239,0.85)",textMuted:"rgba(224,232,239,0.45)",green:"#5BBA6F",yellow:"#E5A538"},
+  crimson:{name:"Crimson",icon:"#C45A5A",bg:"#0C0808",surface:"#161010",border:"rgba(196,90,90,0.10)",borderLight:"rgba(196,90,90,0.18)",accent:"#C45A5A",accentBright:"#E07A7A",accentDim:"#9A4444",accentFaint:"rgba(196,90,90,0.06)",text:"#F0E0DC",textSoft:"rgba(240,224,220,0.85)",textMuted:"rgba(240,224,220,0.45)",green:"#5BBA6F",yellow:"#E5A538"},
+  arcaneViolet:{name:"Arcane Violet",icon:"#9B7ACC",bg:"#0A080E",surface:"#121018",border:"rgba(155,122,204,0.10)",borderLight:"rgba(155,122,204,0.18)",accent:"#9B7ACC",accentBright:"#BAA0E0",accentDim:"#7A5AAC",accentFaint:"rgba(155,122,204,0.06)",text:"#E8E0F2",textSoft:"rgba(232,224,242,0.85)",textMuted:"rgba(232,224,242,0.45)",green:"#5BBA6F",yellow:"#E5A538"},
+  paper:{name:"Paper",icon:"#FFFFFF",bg:"#FFFFFF",surface:"#F5F5F3",border:"rgba(0,0,0,0.12)",borderLight:"rgba(0,0,0,0.18)",accent:"#2C2C2C",accentBright:"#444444",accentDim:"#666666",accentFaint:"rgba(0,0,0,0.04)",text:"#1A1A1A",textSoft:"rgba(26,26,26,0.80)",textMuted:"rgba(26,26,26,0.45)",green:"#2E8B3E",yellow:"#C48820"},
+};
+
+/* ━━━━ EXTRACTION PROMPT ━━━━ */
+const PROMPT = `You are SheetSnap's extraction engine. You are looking at a photographed tabletop RPG character sheet.
+
+Extract every piece of information into structured JSON.
+
+RULES:
+1. NEVER GUESS. NEVER INFER. If unreadable, value is "UNREADABLE".
+2. Read what is WRITTEN, not what SHOULD be there. Never correct math.
+3. Extract sections AS TITLED ON THE SHEET.
+4. Extract fields AS LABELED ON THE SHEET.
+5. Multiple values for one field = separate fields.
+6. Crossed-out values: extract most recent. If unclear, confidence "low".
+7. Readable = "high". Uncertain = "low". Unreadable = "UNREADABLE".
+
+RESPOND WITH ONLY THIS JSON (no markdown, no explanation):
+{"name":"Character Name","name_confidence":"high","system":"Game System","system_confidence":"high","sections":[{"id":"snake_case","title":"Section Title","fields":[{"id":"field_id","label":"Label","value":"Value","confidence":"high"}]}]}
+
+Empty fields: value "" confidence "high". Checkboxes: "checked"/"unchecked". Lists: each item own field. Order: top-to-bottom, left-to-right.`;
+
+/* ━━━━ ICONS ━━━━ */
+const BackIcon=({T})=><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M12 4L6 10L12 16" stroke={T.text} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>;
+const CameraIcon=({T})=><svg width="26" height="26" viewBox="0 0 28 28" fill="none"><path d="M10.5 4.5L8.5 7.5H5C3.9 7.5 3 8.4 3 9.5V21.5C3 22.6 3.9 23.5 5 23.5H23C24.1 23.5 25 22.6 25 21.5V9.5C25 8.4 24.1 7.5 23 7.5H19.5L17.5 4.5H10.5Z" stroke={T.accent} strokeWidth="1.5" strokeLinejoin="round"/><circle cx="14" cy="15" r="4.5" stroke={T.accent} strokeWidth="1.5"/></svg>;
+const UploadIcon=({T})=><svg width="26" height="26" viewBox="0 0 28 28" fill="none"><rect x="3" y="5" width="22" height="18" rx="3" stroke={T.accent} strokeWidth="1.5"/><circle cx="9" cy="12" r="2" stroke={T.accent} strokeWidth="1.2"/><path d="M3 19l6-5 4 3 5-6 7 8" stroke={T.accent} strokeWidth="1.2" strokeLinejoin="round" fill="none"/></svg>;
+const CheckIcon=()=><svg width="18" height="18" viewBox="0 0 20 20" fill="none"><path d="M5 10.5L8.5 14L15 6" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>;
+
+/* ━━━━ SMALL COMPONENTS ━━━━ */
+const Dot=({c,T,s})=><span style={{display:"inline-block",width:7,height:7,borderRadius:"50%",background:c==="low"?T.yellow:T.green,flexShrink:0,...s}}/>;
+const Footer=({T})=><div style={{textAlign:"center",padding:"24px 0 8px"}}><div style={{width:50,height:1,background:`linear-gradient(90deg,transparent,${T.accent},transparent)`,margin:"0 auto 14px",opacity:0.3}}/><span style={{fontSize:11,color:T.textSoft,letterSpacing:2.5,fontFamily:"'Cinzel',Georgia,serif"}}>DEVELOPED BY</span><div style={{fontSize:18,color:T.accent,fontFamily:"'Cinzel',Georgia,serif",fontWeight:700,marginTop:2}}>DigiRune Studios</div><div style={{fontSize:11,color:T.textSoft,marginTop:4}}>App © DigiRune Studios</div></div>;
+const Logo=({T,size=28})=><div style={{display:"flex",justifyContent:"center"}}><span style={{fontSize:size,fontWeight:700,fontFamily:"'Cinzel',Georgia,serif",color:T.text,letterSpacing:1}}>Sheet</span><span style={{fontSize:size,fontWeight:700,fontFamily:"'Cinzel',Georgia,serif",color:T.accent,letterSpacing:1}}>Snap</span></div>;
+
+const MoveBtn=({T,onClick,children,disabled})=><button onClick={onClick} disabled={disabled} style={{background:"none",border:"none",cursor:disabled?"default":"pointer",fontSize:10,color:disabled?"transparent":T.textMuted,padding:"1px 3px",lineHeight:1,opacity:disabled?0:0.7}}>{children}</button>;
+const MoveButtons=({T,si,fi,total,moveField})=><div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",flexShrink:0,gap:0}}><MoveBtn T={T} onClick={()=>moveField(si,fi,-1)} disabled={fi===0}>▲</MoveBtn><MoveBtn T={T} onClick={()=>moveField(si,fi,1)} disabled={fi===total-1}>▼</MoveBtn></div>;
+
+/* ━━━━ EDITABLE COMPONENTS ━━━━ */
+function EditableValue({value,onChange,T,style:sx,placeholder}){
+  const[ed,setEd]=useState(false);const[d,setD]=useState(value);const r=useRef(null);
+  useEffect(()=>{if(ed&&r.current)r.current.focus()},[ed]);
+  useEffect(()=>{setD(value)},[value]);
+  if(ed)return<input ref={r} value={d} onChange={e=>setD(e.target.value)} onBlur={()=>{onChange(d);setEd(false)}} onKeyDown={e=>{if(e.key==="Enter"){onChange(d);setEd(false)}}} style={{fontSize:16,fontWeight:600,color:T.text,background:T.accentFaint,border:`1px solid ${T.borderLight}`,borderRadius:6,padding:"4px 8px",outline:"none",width:"100%",fontFamily:"'EB Garamond',Georgia,serif",...sx}}/>;
+  return<span onClick={()=>setEd(true)} style={{cursor:"pointer",padding:"2px 0",minHeight:22,display:"inline-block",fontSize:16,fontWeight:600,color:value?T.text:T.textMuted,fontStyle:value?"normal":"italic",borderBottom:`1px dashed ${T.borderLight}`,...sx}}>{value||placeholder||"Tap to edit"}</span>;
+}
+
+function EditableLabel({value,onChange,T}){
+  const[ed,setEd]=useState(false);const[d,setD]=useState(value);const r=useRef(null);
+  useEffect(()=>{if(ed&&r.current)r.current.focus()},[ed]);
+  if(ed)return<input ref={r} value={d} onChange={e=>setD(e.target.value)} onBlur={()=>{onChange(d);setEd(false)}} onKeyDown={e=>{if(e.key==="Enter"){onChange(d);setEd(false)}}} style={{fontSize:13,color:T.textSoft,background:T.accentFaint,border:`1px solid ${T.borderLight}`,borderRadius:4,padding:"2px 6px",outline:"none",fontFamily:"'EB Garamond',Georgia,serif",width:"100%"}}/>;
+  return<span onClick={()=>setEd(true)} style={{fontSize:13,color:T.textSoft,cursor:"pointer",letterSpacing:0.3}}>{value}</span>;
+}
+
+/* ━━━━ SIGN IN ━━━━ */
+function SignInScreen({T,onSignIn}){
+  return<div style={{minHeight:"100vh",display:"flex",flexDirection:"column",background:T.bg,position:"relative",overflow:"hidden"}}>
+    <div style={{position:"absolute",top:"15%",left:"50%",transform:"translateX(-50%)",width:300,height:300,background:`radial-gradient(circle,${T.accentFaint} 0%,transparent 60%)`,borderRadius:"50%",opacity:0.6}}/>
+    <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"40px 28px",gap:32,position:"relative"}}>
+      <div style={{textAlign:"center"}}><Logo T={T} size={40}/><div style={{fontSize:15,color:T.accent,fontStyle:"italic",marginTop:6,opacity:0.8,letterSpacing:0.5}}>From paper to pocket.</div></div>
+      <p style={{fontSize:17,color:T.textSoft,textAlign:"center",margin:0,maxWidth:300,lineHeight:1.6}}>Photograph any character sheet. Get a digital character in seconds.</p>
+      <div style={{display:"flex",flexDirection:"column",gap:12,width:"100%",maxWidth:320}}>
+        <button onClick={onSignIn} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:10,padding:"16px 20px",background:"#fff",border:"none",borderRadius:14,cursor:"pointer",width:"100%",boxShadow:"0 2px 12px rgba(0,0,0,0.2)"}}>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="#000"><path d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.08-.48-3.24 0-1.44.62-2.2.44-3.06-.4C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.53 4.09zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/></svg>
+          <span style={{fontSize:17,fontWeight:600,color:"#000"}}>Continue with Apple</span>
+        </button>
+        <button onClick={onSignIn} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:10,padding:"16px 20px",background:T.surface,border:`1px solid ${T.borderLight}`,borderRadius:14,cursor:"pointer",width:"100%",boxShadow:`0 2px 12px ${T.accentFaint}`}}>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+          <span style={{fontSize:17,fontWeight:600,color:T.text}}>Continue with Google</span>
+        </button>
+      </div>
+      <p style={{fontSize:14,color:T.textMuted,textAlign:"center",margin:0,maxWidth:300,lineHeight:1.5,fontStyle:"italic"}}>Your data stays yours. No ads. No subscriptions. Ever.</p>
+    </div>
+    <Footer T={T}/>
+  </div>;
+}
+
+/* ━━━━ HOME SCREEN ━━━━ */
+function HomeScreen({T,characters,fallenHeroes,onStartCapture,onOpenChar,onOpenFallen,onDeleteChar,onArchiveChar,onRestoreChar,onDeleteFallen,onImport}){
+  const[showFallen,setShowFallen]=useState(false);
+  const importRef=useRef(null);
+  const handleImport=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>{try{const c=JSON.parse(ev.target.result);if(c.name&&c.sections){onImport(c)}}catch(err){}};r.readAsText(f);e.target.value=""};
+  return<div style={{minHeight:"100vh",display:"flex",flexDirection:"column",background:T.bg}}>
+    <div style={{textAlign:"center",padding:"24px 20px 18px",borderBottom:`1px solid ${T.border}`,background:T.surface}}><Logo T={T}/><div style={{fontSize:14,color:T.accent,fontStyle:"italic",marginTop:4,opacity:0.8,letterSpacing:0.5}}>From paper to pocket.</div></div>
+    <div style={{flex:1,padding:"20px 22px",display:"flex",flexDirection:"column",gap:18,overflowY:"auto"}}>
+      {characters.length>0&&<div style={{display:"flex",flexDirection:"column",gap:8}}>
+        <span style={{fontSize:14,color:T.textMuted,letterSpacing:1.5,fontFamily:"'Cinzel',Georgia,serif"}}>YOUR CHARACTERS</span>
+        {characters.map((c,i)=>{const ct=c.themeKey&&THEMES[c.themeKey]?THEMES[c.themeKey]:T;return<div key={i} style={{display:"flex",alignItems:"center",gap:0}}>
+          <button onClick={()=>onOpenChar(i)} style={{flex:1,display:"flex",alignItems:"center",gap:14,padding:"16px 18px",background:`linear-gradient(135deg,${T.surface},${ct.accentFaint})`,border:`1px solid ${T.border}`,borderLeft:`3px solid ${ct.accent}`,borderRadius:"14px 0 0 14px",cursor:"pointer",textAlign:"left"}}>
+            <div style={{width:46,height:46,borderRadius:13,background:c.avatarImg?`url(${c.avatarImg})`:`linear-gradient(135deg,${ct.accentFaint},transparent)`,backgroundSize:"cover",backgroundPosition:c.avatarPos?`${c.avatarPos.x}% ${c.avatarPos.y}%`:"center",border:`1.5px solid ${ct.borderLight}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:`0 2px 8px ${ct.accentFaint}`,overflow:"hidden"}}>{!c.avatarImg&&<span style={{fontSize:21,fontWeight:700,color:ct.accent,fontFamily:"'Cinzel',Georgia,serif"}}>{c.name.charAt(0)}</span>}</div>
+            <div style={{flex:1}}><div style={{fontSize:18,fontWeight:700,color:T.text,fontFamily:"'Cinzel',Georgia,serif"}}>{c.name}</div><div style={{fontSize:14,color:T.textMuted,marginTop:2}}>{c.system}</div></div>
+          </button>
+          <button onClick={()=>onArchiveChar(i)} style={{padding:"16px 12px",background:T.surface,border:`1px solid ${T.border}`,borderLeft:"none",cursor:"pointer",fontSize:15,color:T.textMuted,alignSelf:"stretch",display:"flex",alignItems:"center"}} title="Archive">⚔</button>
+          <button onClick={()=>onDeleteChar(i)} style={{padding:"16px 12px",background:T.surface,border:`1px solid ${T.border}`,borderLeft:"none",borderRadius:"0 14px 14px 0",cursor:"pointer",fontSize:15,color:T.textMuted,alignSelf:"stretch",display:"flex",alignItems:"center"}} title="Delete">✕</button>
+        </div>})}
+      </div>}
+      <h1 style={{fontSize:26,fontWeight:700,fontFamily:"'Cinzel',Georgia,serif",color:T.text,margin:0,textAlign:"center"}}>{characters.length>0?"Add Another Character":"Scan Your Character"}</h1>
+      <p style={{fontSize:17,lineHeight:1.6,color:T.textSoft,margin:0,textAlign:"center",maxWidth:360,alignSelf:"center"}}>Upload your character sheet pages — any game, any system. Your character lives on your devices.</p>
+      <div style={{display:"flex",flexDirection:"column",gap:12,marginTop:8}}>
+        <button onClick={()=>onStartCapture("camera")} style={{display:"flex",alignItems:"center",gap:16,padding:"18px 20px",background:`linear-gradient(135deg,${T.surface},${T.accentFaint})`,border:`1px solid ${T.borderLight}`,borderRadius:14,cursor:"pointer",textAlign:"left",boxShadow:`0 2px 12px ${T.accentFaint}`}}>
+          <div style={{width:50,height:50,borderRadius:14,background:`linear-gradient(135deg,${T.accentFaint},transparent)`,border:`1.5px solid ${T.borderLight}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><CameraIcon T={T}/></div>
+          <div><div style={{fontSize:18,fontWeight:700,color:T.text,fontFamily:"'Cinzel',Georgia,serif"}}>Take Photos</div><div style={{fontSize:15,color:T.textMuted,lineHeight:1.4,marginTop:2}}>Use your camera to photograph each page</div></div>
+        </button>
+        <button onClick={()=>onStartCapture("upload")} style={{display:"flex",alignItems:"center",gap:16,padding:"18px 20px",background:`linear-gradient(135deg,${T.surface},${T.accentFaint})`,border:`1px solid ${T.borderLight}`,borderRadius:14,cursor:"pointer",textAlign:"left",boxShadow:`0 2px 12px ${T.accentFaint}`}}>
+          <div style={{width:50,height:50,borderRadius:14,background:`linear-gradient(135deg,${T.accentFaint},transparent)`,border:`1.5px solid ${T.borderLight}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><UploadIcon T={T}/></div>
+          <div><div style={{fontSize:18,fontWeight:700,color:T.text,fontFamily:"'Cinzel',Georgia,serif"}}>Upload from Device</div><div style={{fontSize:15,color:T.textMuted,lineHeight:1.4,marginTop:2}}>Choose photos already on your device</div></div>
+        </button>
+      </div>
+      <input ref={importRef} type="file" accept=".json" onChange={handleImport} style={{display:"none"}}/>
+      <button onClick={()=>importRef.current?.click()} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"14px",background:"none",border:`1px solid ${T.borderLight}`,borderRadius:12,cursor:"pointer",width:"100%"}}><span style={{fontSize:15,color:T.textSoft}}>⬆ Import Character from Backup</span></button>
+      {fallenHeroes.length>0&&<div style={{marginTop:12}}>
+        <button onClick={()=>setShowFallen(!showFallen)} style={{display:"flex",alignItems:"center",gap:8,background:"none",border:"none",cursor:"pointer",padding:"8px 0",width:"100%"}}>
+          <span style={{fontSize:14,color:T.textMuted,letterSpacing:1.5,fontFamily:"'Cinzel',Georgia,serif"}}>FALLEN HEROES</span>
+          <span style={{fontSize:12,color:T.textMuted}}>({fallenHeroes.length}) {showFallen?"▾":"▸"}</span>
+        </button>
+        {showFallen&&<div style={{display:"flex",flexDirection:"column",gap:8,marginTop:4}}>
+          {fallenHeroes.map((c,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:0,animation:"fadeIn 0.2s ease"}}>
+            <button onClick={()=>onOpenFallen(i)} style={{flex:1,display:"flex",alignItems:"center",gap:14,padding:"16px 18px",background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${T.textMuted}`,borderRadius:"14px 0 0 14px",cursor:"pointer",textAlign:"left",opacity:0.65}}>
+              <div style={{width:46,height:46,borderRadius:13,background:"rgba(255,255,255,0.03)",border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><span style={{fontSize:21,fontWeight:700,color:T.textMuted,fontFamily:"'Cinzel',Georgia,serif"}}>{c.name.charAt(0)}</span></div>
+              <div style={{flex:1}}><div style={{fontSize:18,fontWeight:700,color:T.textMuted,fontFamily:"'Cinzel',Georgia,serif"}}>{c.name}</div><div style={{fontSize:13,color:T.textMuted,marginTop:2}}>{c.system} · Archived {c.archivedAt?new Date(c.archivedAt).toLocaleDateString():""}</div></div>
+            </button>
+            <button onClick={()=>onRestoreChar(i)} style={{padding:"16px 12px",background:T.surface,border:`1px solid ${T.border}`,borderLeft:"none",cursor:"pointer",fontSize:14,color:T.accent,alignSelf:"stretch",display:"flex",alignItems:"center"}} title="Restore">↩</button>
+            <button onClick={()=>onDeleteFallen(i)} style={{padding:"16px 12px",background:T.surface,border:`1px solid ${T.border}`,borderLeft:"none",borderRadius:"0 14px 14px 0",cursor:"pointer",fontSize:15,color:T.textMuted,alignSelf:"stretch",display:"flex",alignItems:"center"}} title="Delete">✕</button>
+          </div>)}
+        </div>}
+      </div>}
+    </div>
+    <Footer T={T}/>
+  </div>;
+}
+
+/* ━━━━ CAPTURE SCREEN ━━━━ */
+function CaptureScreen({T,onBack,onScan}){
+  const[images,setImages]=useState([]);const fileRef=useRef(null);const camRef=useRef(null);
+  const handleFiles=e=>{Array.from(e.target.files).forEach(file=>{if(!file.type.startsWith("image/"))return;const reader=new FileReader();reader.onload=ev=>setImages(prev=>[...prev,{dataUrl:ev.target.result,name:file.name}]);reader.readAsDataURL(file)});e.target.value=""};
+  return<div style={{minHeight:"100vh",display:"flex",flexDirection:"column",background:T.bg}}>
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 16px",borderBottom:`1px solid ${T.border}`}}>
+      <button onClick={onBack} style={{display:"flex",alignItems:"center",gap:4,background:"none",border:"none",cursor:"pointer"}}><BackIcon T={T}/><span style={{fontSize:16,color:T.textMuted}}>Cancel</span></button>
+      <span style={{fontSize:17,fontWeight:600,color:T.text}}>Add Pages</span><div style={{width:70}}/>
+    </div>
+    <div style={{flex:1,padding:"20px 22px",display:"flex",flexDirection:"column",gap:20}}>
+      <div style={{padding:"14px 16px",background:T.surface,borderRadius:10,border:`1px solid ${T.border}`}}><p style={{fontSize:17,color:T.textSoft,margin:0,lineHeight:1.5}}>{images.length===0?"Add photos of your character sheet pages. Any system, any format.":`${images.length} ${images.length===1?"page":"pages"} added. Add more or tap Scan when ready.`}</p></div>
+      {images.length>0&&<div style={{display:"flex",gap:10,flexWrap:"wrap"}}>{images.map((img,i)=><div key={i} style={{position:"relative",width:90,height:120,borderRadius:10,overflow:"hidden",border:`1px solid ${T.border}`}}><img src={img.dataUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/><div style={{position:"absolute",bottom:0,left:0,right:0,padding:"3px 6px",background:"rgba(0,0,0,0.7)",display:"flex",justifyContent:"space-between",alignItems:"center"}}><span style={{fontSize:11,color:T.text}}>Pg {i+1}</span><button onClick={()=>setImages(p=>p.filter((_,j)=>j!==i))} style={{background:"none",border:"none",color:T.textMuted,fontSize:14,cursor:"pointer"}}>✕</button></div></div>)}</div>}
+      <input ref={fileRef} type="file" accept="image/*" multiple onChange={handleFiles} style={{display:"none"}}/>
+      <input ref={camRef} type="file" accept="image/*" capture="environment" onChange={handleFiles} style={{display:"none"}}/>
+      <div style={{display:"flex",gap:12}}>
+        <button onClick={()=>camRef.current?.click()} style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"14px 12px",background:"none",border:`1px dashed ${T.borderLight}`,borderRadius:12,cursor:"pointer"}}><CameraIcon T={T}/><span style={{fontSize:17,color:T.accent}}>Camera</span></button>
+        <button onClick={()=>fileRef.current?.click()} style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"14px 12px",background:"none",border:`1px dashed ${T.borderLight}`,borderRadius:12,cursor:"pointer"}}><UploadIcon T={T}/><span style={{fontSize:17,color:T.accent}}>Upload</span></button>
+      </div>
+      {images.length>0&&<button onClick={()=>onScan(images)} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4,padding:"18px 24px",background:`linear-gradient(135deg,${T.accent},${T.accentBright})`,border:"none",borderRadius:14,cursor:"pointer",marginTop:8}}><span style={{fontSize:20,fontWeight:700,color:T.bg,fontFamily:"'Cinzel',Georgia,serif",letterSpacing:1}}>Scan Character</span><span style={{fontSize:15,color:"rgba(10,10,12,0.6)"}}>{images.length} {images.length===1?"page":"pages"} ready</span></button>}
+    </div>
+  </div>;
+}
+
+/* ━━━━ PROCESSING SCREEN ━━━━ */
+function ProcessingScreen({T,images,onComplete,onError}){
+  const[step,setStep]=useState(0);const[error,setError]=useState(null);const ran=useRef(false);
+  useEffect(()=>{
+    if(ran.current)return;ran.current=true;
+    (async()=>{
+      try{setStep(1);
+        const content=[];images.forEach((img,i)=>{content.push({type:"image",source:{type:"base64",media_type:img.dataUrl.split(";")[0].split(":")[1],data:img.dataUrl.split(",")[1]}});if(images.length>1)content.push({type:"text",text:`(Page ${i+1} of ${images.length} of the SAME character sheet.)`})});
+        content.push({type:"text",text:PROMPT});setStep(2);
+        const res=await fetch(API_URL,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:4096,messages:[{role:"user",content}]})});
+        if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e.error?.message||`API ${res.status}`)}
+        const data=await res.json();const text=data.content.filter(b=>b.type==="text").map(b=>b.text).join("");setStep(3);
+        const parsed=JSON.parse(text.replace(/```json\s*/g,"").replace(/```\s*/g,"").trim());
+        if(!parsed.name||!parsed.sections)throw new Error("Invalid extraction");
+        /* Validate & sanitize */
+        parsed.name=String(parsed.name||"Unknown Character");
+        parsed.name_confidence=(parsed.name_confidence==="low")?"low":"high";
+        parsed.system=String(parsed.system||"Unknown System");
+        parsed.system_confidence=(parsed.system_confidence==="low")?"low":"high";
+        parsed.sections=(parsed.sections||[]).filter(s=>s&&s.title).map((s,si)=>({id:s.id||`sec_${si}`,title:String(s.title),fields:(s.fields||[]).filter(f=>f&&f.label).map((f,fi)=>({id:f.id||`f_${si}_${fi}`,label:String(f.label),value:String(f.value??""),confidence:f.confidence==="low"?"low":"high"}))})).filter(s=>s.fields.length>0);
+        if(!parsed.sections.length)throw new Error("No readable sections found");
+        setTimeout(()=>onComplete(parsed),800);
+      }catch(err){setError(err.message)}
+    })();
+  },[]);
+  const steps=[{label:"Reading your character sheets...",done:step>1},{label:"Extracting stats and abilities...",done:step>2},{label:"Building your digital character...",done:false}];
+  if(error)return<div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:T.bg,padding:"40px 28px",gap:20}}><Logo T={T}/><div style={{padding:"16px 20px",background:"rgba(217,79,79,0.1)",border:"1px solid rgba(217,79,79,0.3)",borderRadius:12,maxWidth:320,textAlign:"center"}}><div style={{fontSize:17,color:"#F2A0A0",lineHeight:1.5}}>{error}</div></div><button onClick={onError} style={{padding:"14px 28px",background:T.surface,border:`1px solid ${T.border}`,borderRadius:12,cursor:"pointer",fontSize:16,color:T.text}}>Try Again</button></div>;
+  return<div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:T.bg,padding:"40px 28px",gap:36}}>
+    <Logo T={T}/>
+    <div style={{display:"flex",flexDirection:"column",gap:20,width:"100%",maxWidth:320}}>{steps.map((st,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:14,opacity:i<=step?1:0.25,transition:"opacity 0.6s ease"}}><div style={{width:32,height:32,borderRadius:"50%",border:`2px solid ${st.done?T.green:i===step?T.accent:T.border}`,background:st.done?T.green:"none",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"all 0.5s ease",boxShadow:i===step&&!st.done?`0 0 12px ${T.accent}40`:"none"}}>{st.done&&<CheckIcon/>}</div><span style={{fontSize:17,color:i<=step?T.text:T.textMuted,transition:"color 0.5s ease"}}>{st.label}</span></div>)}</div>
+    <div style={{width:"100%",maxWidth:320,height:3,background:T.accentFaint,borderRadius:2,overflow:"hidden"}}><div style={{height:"100%",width:step===0?"10%":step===1?"35%":step===2?"70%":"95%",background:`linear-gradient(90deg,${T.accent},${T.accentBright})`,borderRadius:2,transition:"width 1.5s ease-out"}}/></div>
+    <p style={{fontSize:16,color:T.textMuted,margin:0,fontStyle:"italic"}}>This usually takes just a few seconds.</p>
+  </div>;
+}
+
+/* ━━━━ SECTION BLOCK ━━━━ */
+function SectionBlock({sec,si,style,T,editing,updateField,removeField,moveField,addField,updateSectionTitle,removeSection,moveSection,totalSections,isOpen,onToggle}){
+  const[editTitle,setEditTitle]=useState(false);const[titleDraft,setTitleDraft]=useState(sec.title);const titleRef=useRef(null);
+  useEffect(()=>{if(editTitle&&titleRef.current)titleRef.current.focus()},[editTitle]);
+  return<div style={{background:T.surface,borderRadius:14,border:`1px solid ${T.border}`,borderLeft:`3px solid ${T.accent}`,overflow:"hidden"}}>
+    <div style={{display:"flex",alignItems:"center",padding:"13px 16px",gap:6}}>
+      {editing&&<MoveButtons T={T} si={0} fi={si} total={totalSections} moveField={(_,i,dir)=>moveSection(i,dir)}/>}
+      <button onClick={onToggle} style={{flex:1,display:"flex",alignItems:"center",justifyContent:"space-between",background:"none",border:"none",cursor:"pointer",padding:0}}>
+        {editTitle?<input ref={titleRef} value={titleDraft} onChange={e=>setTitleDraft(e.target.value)} onBlur={()=>{updateSectionTitle(si,titleDraft);setEditTitle(false)}} onKeyDown={e=>{if(e.key==="Enter"){updateSectionTitle(si,titleDraft);setEditTitle(false)}}} onClick={e=>e.stopPropagation()} style={{fontSize:16,fontWeight:700,color:T.accent,fontFamily:"'Cinzel',Georgia,serif",background:T.accentFaint,border:`1px solid ${T.borderLight}`,borderRadius:4,padding:"2px 8px",outline:"none",width:"100%"}}/>
+        :<span onDoubleClick={e=>{if(editing){e.stopPropagation();setEditTitle(true)}}} style={{fontSize:15,fontWeight:700,color:T.accent,fontFamily:"'Cinzel',Georgia,serif",letterSpacing:0.5}}>{sec.title}</span>}
+        <span style={{fontSize:14,color:T.accentDim,flexShrink:0,marginLeft:8}}>{sec.fields.length} {isOpen?"▾":"▸"}</span>
+      </button>
+      {editing&&<button onClick={()=>removeSection(si)} style={{background:"none",border:"none",cursor:"pointer",padding:"2px 4px",fontSize:14,color:T.textMuted,flexShrink:0}}>✕</button>}
+    </div>
+    {isOpen&&<div style={{padding:"0 16px 16px",animation:"fadeIn 0.2s ease"}}>
+      {style==="grid"&&<div style={{display:"flex",flexWrap:"wrap",gap:10}}>{sec.fields.map((f,fi)=><div key={f.id} style={{flex:"1 1 22%",minWidth:74,background:`linear-gradient(160deg,${T.accentFaint},transparent)`,border:`1.5px solid ${T.borderLight}`,borderRadius:12,padding:"12px 8px 10px",textAlign:"center",position:"relative",display:"flex",flexDirection:"column",gap:3,boxShadow:`inset 0 1px 8px ${T.accentFaint}`}}>{editing&&<button onClick={()=>removeField(si,fi)} style={{position:"absolute",top:2,right:4,background:"none",border:"none",cursor:"pointer",fontSize:11,color:T.textMuted}}>✕</button>}<EditableLabel value={f.label} onChange={v=>updateField(si,fi,"label",v)} T={T}/><EditableValue value={f.value} onChange={v=>updateField(si,fi,"value",v)} T={T} style={{fontSize:28,fontWeight:700,fontFamily:"'Cinzel',Georgia,serif",display:"block",textAlign:"center",borderBottom:"none",color:T.accent}}/></div>)}</div>}
+      {style==="skills"&&sec.fields.map((f,fi)=>{const pct=parseInt(f.value);const isPct=!isNaN(pct)&&f.value.includes("%");return<div key={f.id} style={{padding:"5px 0"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:2}}><span style={{display:"flex",alignItems:"center",gap:4,flex:1}}>{editing&&<MoveButtons T={T} si={si} fi={fi} total={sec.fields.length} moveField={moveField}/>}<Dot c={f.confidence} T={T}/><EditableLabel value={f.label} onChange={v=>updateField(si,fi,"label",v)} T={T}/></span><div style={{display:"flex",alignItems:"center",gap:4}}><EditableValue value={f.value} onChange={v=>updateField(si,fi,"value",v)} T={T} style={{fontSize:14,fontWeight:600,color:T.accent,textAlign:"right",maxWidth:60}}/>{editing&&<button onClick={()=>removeField(si,fi)} style={{background:"none",border:"none",cursor:"pointer",fontSize:12,color:T.textMuted}}>✕</button>}</div></div>{isPct&&<div style={{height:3,background:T.accentFaint,borderRadius:2,overflow:"hidden"}}><div style={{height:"100%",width:`${Math.min(pct,100)}%`,background:`linear-gradient(90deg,${T.accentDim},${T.accent})`,borderRadius:2}}/></div>}</div>})}
+      {style==="spells"&&<>{[...new Set(sec.fields.map(f=>f.label))].map(group=><div key={group} style={{marginBottom:12}}><div style={{fontSize:13,color:T.textSoft,letterSpacing:1.5,fontFamily:"'Cinzel',Georgia,serif",marginBottom:8,textTransform:"uppercase"}}>{group}s</div><div style={{display:"flex",flexWrap:"wrap",gap:8}}>{sec.fields.map((f,fi)=>{if(f.label!==group)return null;return<span key={f.id} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"7px 14px",background:`linear-gradient(135deg,${T.accentFaint},transparent)`,border:`1px solid ${T.borderLight}`,borderRadius:20,boxShadow:`0 0 8px ${T.accentFaint}`}}><Dot c={f.confidence} T={T} s={{width:6,height:6}}/><EditableValue value={f.value} onChange={v=>updateField(si,fi,"value",v)} T={T} style={{fontSize:14,borderBottom:"none",padding:0}}/>{editing&&<button onClick={()=>removeField(si,fi)} style={{background:"none",border:"none",cursor:"pointer",fontSize:11,color:T.textMuted,marginLeft:2}}>✕</button>}</span>})}</div></div>)}</>}
+      {style==="default"&&sec.fields.map((f,fi)=><div key={f.id} style={{display:"flex",alignItems:"flex-start",gap:8,padding:"8px 0",borderBottom:`1px solid ${T.accentFaint}`}}>{editing&&<MoveButtons T={T} si={si} fi={fi} total={sec.fields.length} moveField={moveField}/>}<Dot c={f.confidence} T={T} s={{marginTop:8}}/><div style={{flex:1,display:"flex",flexDirection:"column",gap:2}}><EditableLabel value={f.label} onChange={v=>updateField(si,fi,"label",v)} T={T}/><EditableValue value={f.value} onChange={v=>updateField(si,fi,"value",v)} T={T}/></div>{editing&&<button onClick={()=>removeField(si,fi)} style={{background:"none",border:"none",cursor:"pointer",fontSize:13,color:T.textMuted,padding:"4px",flexShrink:0}}>✕</button>}</div>)}
+      {editing&&<button onClick={()=>addField(si)} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,padding:"8px",background:"none",border:`1px dashed ${T.borderLight}`,borderRadius:8,cursor:"pointer",width:"100%",marginTop:6}}><span style={{fontSize:14,color:T.accentDim}}>+ Add Field</span></button>}
+    </div>}
+  </div>;
+}
+
+/* ━━━━ AVATAR EDITOR ━━━━ */
+function AvatarEditor({data,setData,snap,T,editing}){
+  const fileRef=useRef(null);
+  const[dragging,setDragging]=useState(false);
+  const startPos=useRef(null);const startOff=useRef(null);
+  const img=data.avatarImg||null;
+  const pos=data.avatarPos||{x:50,y:50};
+  const handleFile=e=>{const f=e.target.files[0];if(!f||!f.type.startsWith("image/"))return;const r=new FileReader();r.onload=ev=>{const img2=new Image();img2.onload=()=>{const c=document.createElement("canvas");const s=200;c.width=s;c.height=s;const ctx=c.getContext("2d");const min=Math.min(img2.width,img2.height);const sx=(img2.width-min)/2;const sy=(img2.height-min)/2;ctx.drawImage(img2,sx,sy,min,min,0,0,s,s);const compressed=c.toDataURL("image/jpeg",0.8);snap(data);setData(p=>({...p,avatarImg:compressed,avatarPos:{x:50,y:50}}))};img2.src=ev.target.result};r.readAsDataURL(f);e.target.value=""};
+  const handleStart=e=>{if(!img||!editing)return;e.preventDefault();const t=e.touches?e.touches[0]:e;startPos.current={x:t.clientX,y:t.clientY};startOff.current={...pos};setDragging(true)};
+  const handleMove=e=>{if(!dragging||!startPos.current)return;e.preventDefault();const t=e.touches?e.touches[0]:e;const dx=t.clientX-startPos.current.x;const dy=t.clientY-startPos.current.y;const nx=Math.max(0,Math.min(100,startOff.current.x-dx*0.5));const ny=Math.max(0,Math.min(100,startOff.current.y-dy*0.5));setData(p=>({...p,avatarPos:{x:nx,y:ny}}))};
+  const handleEnd=()=>{if(dragging){setDragging(false);startPos.current=null}};
+  useEffect(()=>{if(dragging){const mo=e=>handleMove(e);const up=()=>handleEnd();window.addEventListener("mousemove",mo);window.addEventListener("mouseup",up);window.addEventListener("touchmove",mo,{passive:false});window.addEventListener("touchend",up);return()=>{window.removeEventListener("mousemove",mo);window.removeEventListener("mouseup",up);window.removeEventListener("touchmove",mo);window.removeEventListener("touchend",up)}}});
+  return<div style={{position:"relative",width:80,height:80}}>
+    <input ref={fileRef} type="file" accept="image/*" onChange={handleFile} style={{display:"none"}}/>
+    <div onClick={()=>editing&&!dragging&&fileRef.current?.click()} onMouseDown={img?handleStart:undefined} onTouchStart={img?handleStart:undefined} style={{width:80,height:80,borderRadius:20,background:img?`url(${img})`:`linear-gradient(135deg,${T.accentFaint},rgba(255,255,255,0.03))`,backgroundSize:"cover",backgroundPosition:`${pos.x}% ${pos.y}%`,border:`1.5px solid ${T.borderLight}`,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:`0 4px 20px ${T.accentFaint}`,cursor:editing?(img?"grab":"pointer"):"default",overflow:"hidden",touchAction:"none"}}>
+      {!img&&<span style={{fontSize:34,fontWeight:700,color:T.accent,fontFamily:"'Cinzel',Georgia,serif"}}>{data.name.charAt(0)||"?"}</span>}
+    </div>
+    {editing&&<div style={{position:"absolute",bottom:-2,right:-2,width:22,height:22,borderRadius:"50%",background:`linear-gradient(135deg,#D4A843,#F0CC6B)`,border:`2px solid ${T.bg}`,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",boxShadow:"0 1px 3px rgba(0,0,0,0.3)"}} onClick={()=>fileRef.current?.click()}><span style={{fontSize:11,color:"#0A0A0C",fontWeight:900}}>📷</span></div>}
+    {editing&&img&&<div style={{textAlign:"center",marginTop:4}}><span style={{fontSize:12,color:T.textSoft}}>Drag to reposition</span></div>}
+  </div>;
+}
+
+/* ━━━━ CHARACTER SCREEN ━━━━ */
+function CharacterScreen({T,character,isFallen,onBack,onSave,onArchive,themeKey,setThemeKey}){
+  const[data,setData]=useState(JSON.parse(JSON.stringify(character)));
+  const[noteInput,setNoteInput]=useState("");const noteRef=useRef(null);
+  const[editing,setEditing]=useState(false);
+  const[showHelp,setShowHelp]=useState(false);
+  const[undoStack,setUndoStack]=useState([]);
+  const[verifyOnly,setVerifyOnly]=useState(false);
+  const initOpen=character.openSections||character.sections.slice(0,6).map(s=>s.id);
+  const[openSections,setOpenSections]=useState(initOpen);
+  const toggleSection=id=>{const next=openSections.includes(id)?openSections.filter(x=>x!==id):[...openSections,id];setOpenSections(next);setData(d=>({...d,openSections:next}));};
+  useEffect(()=>{if(character.themeKey&&THEMES[character.themeKey])setThemeKey(character.themeKey)},[]);
+  const handleTheme=key=>{setThemeKey(key);setData(p=>({...p,themeKey:key}))};
+  const save=()=>{onSave(data);onBack()};
+  const snap=prev=>{setUndoStack(s=>{const n=[...s,JSON.stringify(prev)];return n.length>20?n.slice(-20):n})};
+  const undo=()=>{if(!undoStack.length)return;const prev=JSON.parse(undoStack[undoStack.length-1]);setUndoStack(s=>s.slice(0,-1));setData(prev)};
+  const addNote=()=>{if(!noteInput.trim())return;setData(p=>{snap(p);return{...p,sessionNotes:[...(p.sessionNotes||[]),{id:`n_${Date.now()}`,text:noteInput.trim(),timestamp:new Date().toISOString()}]}});setNoteInput("")};
+  const removeNote=nid=>{setData(p=>{snap(p);return{...p,sessionNotes:(p.sessionNotes||[]).filter(n=>n.id!==nid)}})};
+  const updateField=(si,fi,key,val)=>{setData(p=>{snap(p);const n=JSON.parse(JSON.stringify(p));n.sections[si].fields[fi][key]=val;if(key==="value")n.sections[si].fields[fi].confidence="high";return n})};
+  const removeField=(si,fi)=>{setData(p=>{snap(p);const n=JSON.parse(JSON.stringify(p));n.sections[si].fields.splice(fi,1);return n})};
+  const moveField=(si,fi,dir)=>{setData(p=>{snap(p);const n=JSON.parse(JSON.stringify(p));const f=n.sections[si].fields;const ni=fi+dir;if(ni<0||ni>=f.length)return p;[f[fi],f[ni]]=[f[ni],f[fi]];return n})};
+  const addField=si=>{setData(p=>{snap(p);const n=JSON.parse(JSON.stringify(p));n.sections[si].fields.push({id:`f_${Date.now()}`,label:"New Field",value:"",confidence:"high"});return n})};
+  const updateSectionTitle=(si,t)=>{setData(p=>{snap(p);const n=JSON.parse(JSON.stringify(p));n.sections[si].title=t;return n})};
+  const removeSection=si=>{setData(p=>{snap(p);const n=JSON.parse(JSON.stringify(p));n.sections.splice(si,1);return n})};
+  const moveSection=(si,dir)=>{setData(p=>{snap(p);const n=JSON.parse(JSON.stringify(p));const ni=si+dir;if(ni<0||ni>=n.sections.length)return p;[n.sections[si],n.sections[ni]]=[n.sections[ni],n.sections[si]];return n})};
+  const addSection=()=>{setData(p=>{snap(p);const n=JSON.parse(JSON.stringify(p));n.sections.push({id:`sec_${Date.now()}`,title:"New Section",fields:[{id:`f_${Date.now()}`,label:"New Field",value:"",confidence:"high"}]});return n})};
+  const updateName=v=>setData(p=>{snap(p);return{...p,name:v,name_confidence:"high"}});
+  const updateSystem=v=>setData(p=>{snap(p);return{...p,system:v,system_confidence:"high"}});
+  const getSectionStyle=sec=>{if(sec.fields.length<=10&&sec.fields.every(f=>!f.value.includes("%")&&f.value.length<8&&f.label.length<14))return"grid";if(sec.fields.some(f=>f.value.includes("%")))return"skills";if(sec.id==="spells"||sec.title.toLowerCase().includes("spell")||sec.title.toLowerCase().includes("cantrip")||sec.title.toLowerCase().includes("magic"))return"spells";return"default"};
+  const totalFields=data.sections.reduce((a,s)=>a+s.fields.length,0);
+  const lowConfCount=data.sections.reduce((a,s)=>a+s.fields.filter(f=>f.confidence==="low").length,0)+(data.name_confidence==="low"?1:0)+(data.system_confidence==="low"?1:0);
+
+  return<div style={{minHeight:"100vh",display:"flex",flexDirection:"column",background:T.bg}}>
+    {showHelp&&<div onClick={()=>setShowHelp(false)} style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.7)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+      <div onClick={e=>e.stopPropagation()} style={{background:T.bg,border:`1px solid ${T.borderLight}`,borderRadius:16,padding:"24px 22px",maxWidth:380,width:"100%",maxHeight:"80vh",overflowY:"auto",boxShadow:"0 8px 40px rgba(0,0,0,0.5)"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}><span style={{fontSize:18,fontWeight:700,color:T.accent,fontFamily:"'Cinzel',Georgia,serif"}}>How to Use This Page</span><button onClick={()=>setShowHelp(false)} style={{background:"none",border:"none",cursor:"pointer",fontSize:18,color:T.textMuted}}>✕</button></div>
+        <div style={{display:"flex",flexDirection:"column",gap:14,fontSize:15,color:T.textSoft,lineHeight:1.6}}>
+          <div><span style={{fontWeight:700,color:T.accent}}>Tap any value</span> to edit it inline. Tap a field label to rename it.</div>
+          <div><span style={{fontWeight:700,color:T.accent}}>Character portrait</span> — tap the avatar circle or the camera icon to upload a photo of your mini, portrait, or character art. Drag the image to reposition it within the frame.</div>
+          <div><span style={{fontWeight:700,color:T.accent}}>Confidence dots</span> appear next to every field. <span style={{color:T.green}}>Green</span> means the AI read it clearly. <span style={{color:T.yellow}}>Yellow</span> means please verify. Dots upgrade to green when you edit.</div>
+          <div><span style={{fontWeight:700,color:T.accent}}>Fields to verify</span> — if any yellow dots exist, a filter button appears in the legend bar. Tap it to see only the sections that need your attention.</div>
+          <div><span style={{fontWeight:700,color:T.accent}}>Edit Character Sheet</span> reveals advanced controls: reorder fields and sections with ▲▼, remove items with ✕, add new fields or sections, and rename section titles by double-tapping them.</div>
+          <div><span style={{fontWeight:700,color:T.accent}}>Color dots</span> in the top bar switch your theme. Pick the one that fits your character.</div>
+          <div><span style={{fontWeight:700,color:T.accent}}>Session Notes</span> at the bottom let you log notes after each game, automatically timestamped.</div>
+          <div><span style={{fontWeight:700,color:T.accent}}>Save & Back</span> saves all changes and returns to your character list.</div>
+          <div><span style={{fontWeight:700,color:T.accent}}>Undo</span> appears after any edit. Tap it to step back through your changes, up to 20 steps. The undo history clears when you leave the page.</div>
+          <div><span style={{fontWeight:700,color:T.accent}}>Fallen Heroes</span> — scroll to the bottom to archive retired or deceased characters. They're preserved forever and never count against your character slots.</div>
+          <div><span style={{fontWeight:700,color:T.accent}}>Export</span> — download your character as a JSON backup file. Import it back from the home screen on any device.</div>
+        </div>
+        <button onClick={()=>setShowHelp(false)} style={{display:"flex",alignItems:"center",justifyContent:"center",padding:"12px",background:`linear-gradient(135deg,#D4A843,#F0CC6B)`,border:"none",borderRadius:10,cursor:"pointer",width:"100%",marginTop:18}}><span style={{fontSize:15,fontWeight:700,color:"#0A0A0C",fontFamily:"'Cinzel',Georgia,serif"}}>Got It</span></button>
+      </div>
+    </div>}
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px",borderBottom:`1px solid ${T.border}`,background:T.surface}}>
+      <div style={{display:"flex",alignItems:"center",gap:8}}><button onClick={save} style={{display:"flex",alignItems:"center",gap:5,background:T.accentFaint,border:`1px solid ${T.borderLight}`,borderRadius:8,padding:"5px 12px",cursor:"pointer"}}><BackIcon T={T}/><span style={{fontSize:14,fontWeight:700,color:T.accent,fontFamily:"'Cinzel',Georgia,serif"}}>Save & Back</span></button>{undoStack.length>0&&<button onClick={undo} style={{display:"flex",alignItems:"center",gap:4,background:`linear-gradient(135deg,#D4A843,#F0CC6B)`,border:"none",borderRadius:8,padding:"4px 10px",cursor:"pointer",boxShadow:"0 1px 4px rgba(0,0,0,0.3)",animation:"fadeIn 0.2s ease"}}><span style={{fontSize:13,fontWeight:700,color:"#0A0A0C",fontFamily:"'Cinzel',Georgia,serif"}}>↩ Undo</span></button>}</div>
+      <div style={{display:"flex",gap:10,alignItems:"center"}}><button onClick={()=>setEditing(!editing)} style={{background:editing?`linear-gradient(135deg,${T.accent},${T.accentBright})`:`linear-gradient(135deg,#D4A843,#F0CC6B)`,border:"none",borderRadius:8,padding:"5px 12px",cursor:"pointer",fontSize:11,fontWeight:700,color:editing?T.bg:"#0A0A0C",fontFamily:"'Cinzel',Georgia,serif",transition:"all 0.2s ease",whiteSpace:"nowrap",letterSpacing:0.3,boxShadow:"0 1px 4px rgba(0,0,0,0.3)",marginRight:4}}>{editing?"✎ Done Editing":"✎ Edit Character Sheet"}</button>{Object.entries(THEMES).map(([key,theme])=>{const isLight=theme.icon==="#FFFFFF";return<button key={key} onClick={()=>handleTheme(key)} style={{width:key===themeKey?18:14,height:key===themeKey?18:14,borderRadius:"50%",border:key===themeKey?`2px solid ${isLight?"#999":theme.icon}`:`1px solid ${isLight?"rgba(0,0,0,0.25)":"rgba(255,255,255,0.15)"}`,background:theme.icon,cursor:"pointer",transition:"all 0.2s ease",boxShadow:key===themeKey?`0 0 8px ${isLight?"rgba(0,0,0,0.15)":theme.icon+"40"}`:"none",flexShrink:0}} title={theme.name}/>})}<button onClick={()=>setShowHelp(true)} style={{width:28,height:28,borderRadius:"50%",border:"none",background:`linear-gradient(135deg,#D4A843,#F0CC6B)`,cursor:"pointer",fontSize:16,fontWeight:900,color:"#0A0A0C",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontFamily:"'Cinzel',Georgia,serif",marginLeft:4,boxShadow:"0 1px 4px rgba(0,0,0,0.3)"}} title="How to use this page">?</button></div>
+    </div>
+    <div style={{flex:1,padding:"20px 18px 40px",display:"flex",flexDirection:"column",gap:16,overflowY:"auto"}}>
+      {/* Hero */}
+      <div style={{background:`linear-gradient(160deg,${T.surface} 0%,${T.accentFaint} 50%,${T.surface} 100%)`,border:`1px solid ${T.borderLight}`,borderRadius:18,padding:"24px 20px 20px",position:"relative",overflow:"hidden"}}>
+        <div style={{position:"absolute",top:-40,right:-40,width:140,height:140,background:`radial-gradient(circle,${T.accentFaint} 0%,transparent 60%)`,borderRadius:"50%"}}/>
+        <div style={{position:"absolute",bottom:-30,left:-30,width:100,height:100,background:`radial-gradient(circle,${T.accentFaint} 0%,transparent 70%)`,borderRadius:"50%",opacity:0.5}}/>
+        <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:12,position:"relative"}}>
+          <AvatarEditor data={data} setData={setData} snap={snap} T={T} editing={editing}/>
+          <div style={{textAlign:"center"}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6}}><EditableValue value={data.name} onChange={updateName} T={T} style={{fontSize:26,fontWeight:700,fontFamily:"'Cinzel',Georgia,serif",lineHeight:1.15,borderBottom:"none",textAlign:"center"}}/><Dot c={data.name_confidence} T={T}/></div>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,marginTop:4}}><EditableValue value={data.system} onChange={updateSystem} T={T} style={{fontSize:14,color:T.accentDim,borderBottom:"none",letterSpacing:1,textTransform:"uppercase"}}/><Dot c={data.system_confidence} T={T} s={{width:6,height:6}}/></div>
+          </div>
+          {(()=>{const si=data.sections.findIndex(s=>s.id==="identity"||s.title.toLowerCase().includes("info"));if(si<0)return null;const info=data.sections[si];const tags=info.fields.map((f,fi)=>({f,fi})).filter(({f})=>f.value&&["race","occupation","class","alignment","hit_points","level","experience level","exp_level"].some(k=>f.id.toLowerCase().includes(k)||f.label.toLowerCase().includes(k))).slice(0,4);if(!tags.length)return null;return<div style={{display:"flex",flexWrap:"wrap",justifyContent:"center",gap:6,marginTop:4}}>{tags.map(({f,fi})=><span key={f.id} style={{fontSize:12,padding:"3px 10px",background:T.accentFaint,border:`1px solid ${T.border}`,borderRadius:20,letterSpacing:0.3}}><EditableValue value={f.value} onChange={v=>updateField(si,fi,"value",v)} T={T} style={{fontSize:12,borderBottom:"none",padding:0,color:T.textSoft}}/></span>)}</div>})()}
+        </div>
+        <div style={{width:60,height:1,background:`linear-gradient(90deg,transparent,${T.accent},transparent)`,margin:"16px auto 0",opacity:0.25}}/>
+      </div>
+      {/* Legend */}
+      <div style={{display:"flex",gap:14,padding:"2px 6px",flexWrap:"wrap",alignItems:"center"}}><div style={{display:"flex",alignItems:"center",gap:5,fontSize:13,color:T.textSoft}}><Dot c="high" T={T}/> Confident</div><div style={{display:"flex",alignItems:"center",gap:5,fontSize:13,color:T.textSoft}}><Dot c="low" T={T}/> Verify</div>{lowConfCount>0&&<button onClick={()=>setVerifyOnly(!verifyOnly)} style={{display:"flex",alignItems:"center",gap:4,padding:"3px 10px",background:verifyOnly?T.yellow:"none",border:`1px solid ${verifyOnly?T.yellow:T.borderLight}`,borderRadius:12,cursor:"pointer",marginLeft:4}}><span style={{fontSize:12,fontWeight:700,color:verifyOnly?T.bg:T.yellow}}>{verifyOnly?"Show All":`${lowConfCount} to verify`}</span></button>}<span style={{fontSize:13,color:T.textSoft,marginLeft:"auto"}}>{totalFields} fields · {data.sections.length} sections</span></div>
+      {/* Sections */}
+      {data.sections.map((sec,si)=>{if(verifyOnly&&!sec.fields.some(f=>f.confidence==="low"))return null;const style=getSectionStyle(sec);return<SectionBlock key={sec.id} sec={sec} si={si} style={style} T={T} editing={editing} isOpen={openSections.includes(sec.id)} onToggle={()=>toggleSection(sec.id)} updateField={updateField} removeField={removeField} moveField={moveField} addField={addField} updateSectionTitle={updateSectionTitle} removeSection={removeSection} moveSection={moveSection} totalSections={data.sections.length}/>})}
+      {editing&&<button onClick={addSection} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"14px",background:"none",border:`1px dashed ${T.borderLight}`,borderRadius:12,cursor:"pointer",width:"100%"}}><span style={{fontSize:16,color:T.accentDim}}>+ Add Section</span></button>}
+      {/* Export */}
+      <button onClick={()=>{const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download=`${(data.name||"character").replace(/[^a-z0-9]/gi,"_")}.json`;a.click();URL.revokeObjectURL(url)}} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"14px",background:"none",border:`1px solid ${T.borderLight}`,borderRadius:12,cursor:"pointer",width:"100%"}}><span style={{fontSize:15,color:T.textSoft}}>⬇ Export Character (Backup)</span></button>
+      {/* Archive */}
+      {isFallen?<div style={{padding:"14px 16px",background:"rgba(255,255,255,0.03)",border:`1px solid ${T.border}`,borderRadius:12,textAlign:"center"}}><span style={{fontSize:14,color:T.textMuted,fontStyle:"italic"}}>⚔ This character rests in the Fallen Heroes archive</span></div>
+      :onArchive&&<button onClick={()=>{onSave(data);onArchive()}} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"14px",background:"none",border:"1px solid rgba(196,90,90,0.2)",borderRadius:12,cursor:"pointer",width:"100%"}}><span style={{fontSize:15,color:"rgba(196,90,90,0.7)"}}>⚔ Archive to Fallen Heroes</span></button>}
+      {/* Session Notes */}
+      <div style={{background:T.surface,borderRadius:12,border:`1px solid ${T.border}`,overflow:"hidden"}}><div style={{padding:"14px 16px",borderBottom:`1px solid ${T.border}`}}><span style={{fontSize:16,fontWeight:700,color:T.accent,fontFamily:"'Cinzel',Georgia,serif"}}>Session Notes</span></div><div style={{padding:"12px 14px",display:"flex",flexDirection:"column",gap:10}}>
+        <div style={{display:"flex",gap:8}}><input ref={noteRef} value={noteInput} onChange={e=>setNoteInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")addNote()}} placeholder="Add a session note..." style={{flex:1,fontSize:15,color:T.text,background:T.accentFaint,border:`1px solid ${T.borderLight}`,borderRadius:8,padding:"10px 12px",outline:"none",fontFamily:"'EB Garamond',Georgia,serif"}}/><button onClick={addNote} style={{padding:"10px 16px",background:`linear-gradient(135deg,${T.accent},${T.accentBright})`,border:"none",borderRadius:8,cursor:"pointer",fontSize:14,fontWeight:700,color:T.bg,fontFamily:"'Cinzel',Georgia,serif",flexShrink:0}}>+</button></div>
+        {(data.sessionNotes||[]).length===0&&<p style={{fontSize:14,color:T.textMuted,fontStyle:"italic",margin:0,textAlign:"center",padding:"8px 0"}}>No notes yet. Add your first after a session.</p>}
+        {[...(data.sessionNotes||[])].reverse().map(note=><div key={note.id} style={{padding:"10px 12px",background:T.accentFaint,borderRadius:8,border:`1px solid ${T.border}`}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}><div style={{flex:1}}><div style={{fontSize:12,color:T.textSoft,marginBottom:4,fontFamily:"'Cinzel',Georgia,serif",letterSpacing:0.5}}>{new Date(note.timestamp).toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric",year:"numeric"})} · {new Date(note.timestamp).toLocaleTimeString(undefined,{hour:"numeric",minute:"2-digit"})}</div><div style={{fontSize:15,color:T.text,lineHeight:1.5}}>{note.text}</div></div><button onClick={()=>removeNote(note.id)} style={{background:"none",border:"none",cursor:"pointer",fontSize:13,color:T.textMuted,padding:"2px",flexShrink:0}}>✕</button></div></div>)}
+      </div></div>
+      <Footer T={T}/>
+    </div>
+  </div>;
+}
+
+/* ━━━━ MAIN APP ━━━━ */
+function SheetSnap(){
+  const[view,setView]=useState("loading");
+  const[themeKey,setThemeKey]=useState("darkGold");
+  const[characters,setCharacters]=useState([]);
+  const[fallenHeroes,setFallenHeroes]=useState([]);
+  const[activeCharIdx,setActiveCharIdx]=useState(null);
+  const[activeIsFallen,setActiveIsFallen]=useState(false);
+  const[captureImages,setCaptureImages]=useState([]);
+  const T=THEMES[themeKey];
+
+  useEffect(()=>{
+    const c=store.get("ss-chars");if(c)setCharacters(c);
+    const f=store.get("ss-fallen");if(f)setFallenHeroes(f);
+    const t=store.get("ss-theme");if(t)setThemeKey(t);
+    const a=store.get("ss-auth");
+    if(!a){setView("signin");return}
+    const nav=store.get("ss-nav");
+    if(nav&&nav.view==="character"&&nav.idx!=null){
+      const list=nav.fallen?f:c;
+      if(list&&nav.idx<list.length){setActiveCharIdx(nav.idx);setActiveIsFallen(!!nav.fallen);setView("character");return}
+    }
+    setView("home");
+  },[]);
+  useEffect(()=>{if(view!=="loading")store.set("ss-chars",characters)},[characters]);
+  useEffect(()=>{if(view!=="loading")store.set("ss-fallen",fallenHeroes)},[fallenHeroes]);
+  useEffect(()=>{if(view!=="loading")store.set("ss-theme",themeKey)},[themeKey]);
+  useEffect(()=>{if(view!=="loading")store.set("ss-nav",{view,idx:activeCharIdx,fallen:activeIsFallen})},[view,activeCharIdx,activeIsFallen]);
+
+  const handleSignIn=()=>{store.set("ss-auth",true);setView("home")};
+  const handleStartCapture=()=>setView("capture");
+  const handleBack=()=>{setView("home")};
+  const handleScan=images=>{setCaptureImages(images);setView("processing")};
+  const handleExtracted=charData=>{const nc=[...characters,charData];setCharacters(nc);setActiveCharIdx(nc.length-1);setActiveIsFallen(false);setView("character")};
+  const handleOpenChar=idx=>{setActiveCharIdx(idx);setActiveIsFallen(false);setView("character")};
+  const handleOpenFallen=idx=>{setActiveCharIdx(idx);setActiveIsFallen(true);setView("character")};
+  const handleSaveChar=d=>{if(activeIsFallen)setFallenHeroes(p=>p.map((c,i)=>i===activeCharIdx?d:c));else setCharacters(p=>p.map((c,i)=>i===activeCharIdx?d:c))};
+  const handleDeleteChar=idx=>setCharacters(p=>p.filter((_,i)=>i!==idx));
+  const handleArchiveChar=idx=>{const c=characters[idx];setFallenHeroes(p=>[...p,{...c,archivedAt:new Date().toISOString()}]);setCharacters(p=>p.filter((_,i)=>i!==idx))};
+  const handleRestoreChar=idx=>{const{archivedAt,...c}=fallenHeroes[idx];setCharacters(p=>[...p,c]);setFallenHeroes(p=>p.filter((_,i)=>i!==idx))};
+  const handleDeleteFallen=idx=>setFallenHeroes(p=>p.filter((_,i)=>i!==idx));
+  const handleImport=charData=>{const nc=[...characters,charData];setCharacters(nc);setActiveCharIdx(nc.length-1);setActiveIsFallen(false);setView("character")};
+  const handleProcessError=()=>{setView("capture")};
+
+  if(view==="loading")return<div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"#0A0A0C"}}><Logo T={THEMES.darkGold} size={32}/></div>;
+
+  return<div>
+    {store._full&&<div style={{padding:"10px 16px",background:"rgba(217,79,79,0.15)",borderBottom:"1px solid rgba(217,79,79,0.3)",textAlign:"center"}}><span style={{fontSize:14,color:"#F2A0A0",lineHeight:1.5}}>⚠ Storage is full. Export your characters to avoid losing data.</span></div>}
+    {view==="signin"&&<SignInScreen T={T} onSignIn={handleSignIn}/>}
+    {view==="home"&&<HomeScreen T={T} characters={characters} fallenHeroes={fallenHeroes} onStartCapture={handleStartCapture} onOpenChar={handleOpenChar} onOpenFallen={handleOpenFallen} onDeleteChar={handleDeleteChar} onArchiveChar={handleArchiveChar} onRestoreChar={handleRestoreChar} onDeleteFallen={handleDeleteFallen} onImport={handleImport}/>}
+    {view==="capture"&&<CaptureScreen T={T} onBack={handleBack} onScan={handleScan}/>}
+    {view==="processing"&&<ProcessingScreen T={T} images={captureImages} onComplete={handleExtracted} onError={handleProcessError}/>}
+    {view==="character"&&activeCharIdx!==null&&<CharacterScreen T={T} character={activeIsFallen?fallenHeroes[activeCharIdx]:characters[activeCharIdx]} isFallen={activeIsFallen} onBack={handleBack} onSave={handleSaveChar} onArchive={activeIsFallen?null:()=>{handleArchiveChar(activeCharIdx);setView("home")}} themeKey={themeKey} setThemeKey={setThemeKey}/>}
+  </div>;
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<SheetSnap/>);
+</script>
+</body>
+</html>
