@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#0A0A0C">
+<meta name="description" content="SheetSnap — Universal Character Sheet Scanner by DigiRune Studios">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="SheetSnap">
+<title>SheetSnap — DigiRune Studios</title>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=EB+Garamond:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0A0A0C;font-family:'EB Garamond',Georgia,serif;color:#F2E8D4;overflow-x:hidden;-webkit-tap-highlight-color:transparent}
+body,div,button,span,input,p{transition:background-color 0.25s ease,color 0.25s ease,border-color 0.25s ease}
+input,button{font-family:inherit}
+#root{min-height:100vh}
+@keyframes fadeIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+@keyframes nameGlow{0%,100%{filter:brightness(1) drop-shadow(0 0 8px var(--glow-color,rgba(212,168,67,0.4)))}50%{filter:brightness(1.08) drop-shadow(0 0 20px var(--glow-color,rgba(212,168,67,0.6)))}}
+@keyframes subtlePulse{0%,100%{opacity:0.5}50%{opacity:0.8}}
+@keyframes scanLine{0%{transform:translateY(-100%)}100%{transform:translateY(100vh)}}
+@keyframes pageFadeIn{from{opacity:0}to{opacity:1}}
+@keyframes pageFadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.atmo-bg{position:fixed;top:0;left:0;right:0;bottom:0;pointer-events:none;z-index:0}
+.atmo-bg::before,.atmo-bg::after{content:'';position:absolute;border-radius:50%;pointer-events:none}
+#root{position:relative;z-index:1}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script type="text/babel">
+const {useState,useRef,useEffect} = React;
+
+/* ━━━━ CONFIG ━━━━ */
+// Replace with your Cloudflare Worker URL when ready
+const API_URL = 'https://sheetsnap-api.will-6d6.workers.dev';
+
+/* ━━━━ STORAGE ━━━━ */
+const store = {
+  get: k => { try { const v=localStorage.getItem(k); return v?JSON.parse(v):null } catch(e){ return null }},
+  set: (k,v) => { try { localStorage.setItem(k,JSON.stringify(v));return true } catch(e){ if(e.name==="QuotaExceededError"||e.code===22){store._full=true}return false }},
+  _full:false,
+};
+
+/* ━━━━ THEMES ━━━━ */
+const THEMES = {
+  parchment:{name:"Parchment & Leather",icon:"#8b4513",bg:"#f7ecd8",surface:"#f0e2c4",border:"rgba(90,45,12,0.18)",borderLight:"rgba(90,45,12,0.28)",accent:"#8b4513",accentBright:"#5a2d0c",accentDim:"#7a3a10",accentFaint:"rgba(139,69,19,0.08)",text:"#1a1108",textSoft:"rgba(26,17,8,0.85)",textMuted:"rgba(26,17,8,0.65)",green:"#4a7c59",yellow:"#b5451b",
+    nameGlow:"0 0 30px rgba(201,151,58,0.5), 0 0 80px rgba(201,151,58,0.2), 0 3px 6px rgba(0,0,0,0.3)",
+    bodyGrad:"radial-gradient(ellipse at 15% 15%, rgba(139,69,19,0.08) 0%, transparent 55%), radial-gradient(ellipse at 85% 85%, rgba(42,107,124,0.06) 0%, transparent 55%)",
+    ornament:"filigree",ornChar:"❧",heroGlow:"0 0 50px rgba(201,151,58,0.15)",sectionRule:"linear-gradient(90deg, transparent, rgba(139,69,19,0.3), transparent)",
+    nameColor:"#c9973a",headerBg:"linear-gradient(to bottom, #3a1e08, #5a2d0c)",headerText:"#f0e6d0",frame:"4px solid #5a2d0c"},
+  darkGold:{name:"Candlelit Gold",icon:"#D4A843",bg:"#0A0A0C",surface:"#131316",border:"rgba(212,168,67,0.10)",borderLight:"rgba(212,168,67,0.18)",accent:"#D4A843",accentBright:"#F0CC6B",accentDim:"#A88A3D",accentFaint:"rgba(212,168,67,0.06)",text:"#F2E8D4",textSoft:"rgba(242,232,212,0.92)",textMuted:"rgba(242,232,212,0.70)",green:"#5BBA6F",yellow:"#E5A538",
+    nameGlow:"0 0 30px rgba(212,168,67,0.4), 0 0 60px rgba(212,168,67,0.15), 0 2px 4px rgba(0,0,0,0.8)",
+    bodyGrad:"radial-gradient(ellipse at 20% 10%, rgba(212,168,67,0.08) 0%, transparent 50%), radial-gradient(ellipse at 80% 90%, rgba(160,120,40,0.06) 0%, transparent 50%)",
+    ornament:"gold",ornChar:"⟡",heroGlow:"0 0 40px rgba(212,168,67,0.08)",sectionRule:"linear-gradient(90deg, transparent, rgba(212,168,67,0.3), transparent)",frame:"3px solid rgba(212,168,67,0.25)"},
+  neonCircuit:{name:"Neon Circuit",icon:"#00D4E8",bg:"#0C1420",surface:"#141E2C",border:"rgba(0,212,232,0.10)",borderLight:"rgba(0,212,232,0.18)",accent:"#00D4E8",accentBright:"#50E8F8",accentDim:"#0098AA",accentFaint:"rgba(0,212,232,0.06)",text:"#D8EAF0",textSoft:"rgba(216,234,240,0.95)",textMuted:"rgba(216,234,240,0.78)",green:"#00E080",yellow:"#E0A030",
+    nameGlow:"0 0 20px rgba(0,212,232,0.6), 0 0 60px rgba(0,212,232,0.25), 0 0 120px rgba(0,212,232,0.1)",
+    bodyGrad:"radial-gradient(ellipse at 30% 20%, rgba(0,212,232,0.07) 0%, transparent 50%), radial-gradient(ellipse at 70% 80%, rgba(224,160,48,0.04) 0%, transparent 50%)",
+    ornament:"circuit",ornChar:"◈",heroGlow:"0 0 40px rgba(0,212,232,0.08), inset 0 0 30px rgba(0,212,232,0.03)",sectionRule:"linear-gradient(90deg, transparent, rgba(0,212,232,0.3), transparent)",frame:"2px solid rgba(0,212,232,0.25)"},
+  silverIce:{name:"Frozen Rune",icon:"#8AB4CC",bg:"#E8F1F6",surface:"#DCE8F0",border:"rgba(59,83,104,0.18)",borderLight:"rgba(59,83,104,0.25)",accent:"#3B5368",accentBright:"#2A3E50",accentDim:"#4A6578",accentFaint:"rgba(59,83,104,0.07)",text:"#1A2A38",textSoft:"rgba(26,42,56,0.90)",textMuted:"rgba(26,42,56,0.72)",green:"#3A8A5A",yellow:"#C47A20",
+    nameGlow:"0 0 25px rgba(138,180,204,0.4), 0 0 60px rgba(138,180,204,0.15), 0 2px 4px rgba(0,0,0,0.15)",
+    bodyGrad:"radial-gradient(ellipse at 50% 0%, rgba(138,180,204,0.12) 0%, transparent 50%), radial-gradient(ellipse at 20% 80%, rgba(180,210,232,0.08) 0%, transparent 50%)",
+    ornament:"frost",ornChar:"❆",heroGlow:"0 0 40px rgba(138,180,204,0.12)",sectionRule:"linear-gradient(90deg, transparent, rgba(59,83,104,0.25), transparent)",frame:"3px solid rgba(59,83,104,0.3)",
+    nameColor:"#3B5368",headerBg:"linear-gradient(to bottom, #2A3E50, #3B5368)",headerText:"#E0E8EF"},
+  crimson:{name:"Blood & Iron",icon:"#C45A5A",bg:"#1C0A0E",surface:"#2A1218",border:"rgba(201,151,58,0.12)",borderLight:"rgba(201,151,58,0.20)",accent:"#C9973A",accentBright:"#E0B050",accentDim:"#A07830",accentFaint:"rgba(201,151,58,0.07)",text:"#F0E0D8",textSoft:"rgba(240,224,216,0.95)",textMuted:"rgba(240,224,216,0.78)",green:"#5BBA6F",yellow:"#E5A538",
+    nameGlow:"0 0 25px rgba(201,151,58,0.5), 0 0 60px rgba(201,151,58,0.2), 0 2px 4px rgba(0,0,0,0.8)",
+    bodyGrad:"radial-gradient(ellipse at 30% 20%, rgba(140,30,40,0.12) 0%, transparent 50%), radial-gradient(ellipse at 70% 80%, rgba(201,151,58,0.06) 0%, transparent 50%)",
+    ornament:"iron",ornChar:"⚔",heroGlow:"0 0 40px rgba(140,30,40,0.12)",sectionRule:"linear-gradient(90deg, transparent, rgba(201,151,58,0.3), transparent)",frame:"3px solid rgba(140,30,40,0.5)"},
+  arcaneViolet:{name:"Arcane Violet",icon:"#9B7ACC",bg:"#1A1028",surface:"#241838",border:"rgba(180,136,232,0.14)",borderLight:"rgba(180,136,232,0.22)",accent:"#B488E8",accentBright:"#D0A8FF",accentDim:"#8A68B8",accentFaint:"rgba(180,136,232,0.07)",text:"#EAE4F4",textSoft:"rgba(234,228,244,0.92)",textMuted:"rgba(234,228,244,0.75)",green:"#5BBA6F",yellow:"#E5A538",
+    nameGlow:"0 0 25px rgba(180,136,232,0.5), 0 0 60px rgba(208,168,255,0.2), 0 2px 4px rgba(0,0,0,0.8)",
+    bodyGrad:"radial-gradient(ellipse at 40% 10%, rgba(180,136,232,0.10) 0%, transparent 50%), radial-gradient(ellipse at 60% 90%, rgba(140,100,200,0.06) 0%, transparent 50%)",
+    ornament:"arcane",ornChar:"✦",heroGlow:"0 0 40px rgba(180,136,232,0.10)",sectionRule:"linear-gradient(90deg, transparent, rgba(180,136,232,0.3), transparent)",frame:"3px solid rgba(140,100,200,0.35)"},
+  paper:{name:"Paper",icon:"#FFFFFF",bg:"#FFFFFF",surface:"#F5F5F3",border:"rgba(0,0,0,0.12)",borderLight:"rgba(0,0,0,0.18)",accent:"#2C2C2C",accentBright:"#444444",accentDim:"#666666",accentFaint:"rgba(0,0,0,0.04)",text:"#1A1A1A",textSoft:"rgba(26,26,26,0.88)",textMuted:"rgba(26,26,26,0.65)",green:"#2E8B3E",yellow:"#C48820",
+    nameGlow:"0 1px 3px rgba(0,0,0,0.2)",
+    bodyGrad:"none",
+    ornament:"simple",ornChar:"—",heroGlow:"0 2px 16px rgba(0,0,0,0.06)",sectionRule:"linear-gradient(90deg, transparent, rgba(0,0,0,0.15), transparent)",frame:"2px solid rgba(0,0,0,0.12)"},
+};
+
+/* ━━━━ EXTRACTION PROMPT ━━━━ */
+const PROMPT = `You are SheetSnap's extraction engine. You are looking at a photographed tabletop RPG character sheet.
+
+Extract every piece of information into structured JSON.
+
+RULES:
+1. NEVER GUESS. NEVER INFER. If unreadable, value is "UNREADABLE".
+2. Read what is WRITTEN, not what SHOULD be there. Never correct math.
+3. Extract sections AS TITLED ON THE SHEET.
+4. Extract fields AS LABELED ON THE SHEET.
+5. Multiple values for one field = separate fields.
+6. Crossed-out values: extract most recent. If unclear, confidence "low".
+7. Readable = "high". Uncertain = "low". Unreadable = "UNREADABLE".
+
+RESPOND WITH ONLY THIS JSON (no markdown, no explanation):
+{"name":"Character Name","name_confidence":"high","system":"Game System","system_confidence":"high","sections":[{"id":"snake_case","title":"Section Title","fields":[{"id":"field_id","label":"Label","value":"Value","confidence":"high"}]}]}
+
+Empty fields: value "" confidence "high". Checkboxes: "checked"/"unchecked". Lists: each item own field. Order: top-to-bottom, left-to-right.`;
+
+/* ━━━━ ICONS ━━━━ */
+const BackIcon=({T})=><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M12 4L6 10L12 16" stroke={T.text} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>;
+const CameraIcon=({T})=><svg width="26" height="26" viewBox="0 0 28 28" fill="none"><path d="M10.5 4.5L8.5 7.5H5C3.9 7.5 3 8.4 3 9.5V21.5C3 22.6 3.9 23.5 5 23.5H23C24.1 23.5 25 22.6 25 21.5V9.5C25 8.4 24.1 7.5 23 7.5H19.5L17.5 4.5H10.5Z" stroke={T.accent} strokeWidth="1.5" strokeLinejoin="round"/><circle cx="14" cy="15" r="4.5" stroke={T.accent} strokeWidth="1.5"/></svg>;
+const UploadIcon=({T})=><svg width="26" height="26" viewBox="0 0 28 28" fill="none"><rect x="3" y="5" width="22" height="18" rx="3" stroke={T.accent} strokeWidth="1.5"/><circle cx="9" cy="12" r="2" stroke={T.accent} strokeWidth="1.2"/><path d="M3 19l6-5 4 3 5-6 7 8" stroke={T.accent} strokeWidth="1.2" strokeLinejoin="round" fill="none"/></svg>;
+const CheckIcon=()=><svg width="18" height="18" viewBox="0 0 20 20" fill="none"><path d="M5 10.5L8.5 14L15 6" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>;
+
+/* ━━━━ SMALL COMPONENTS ━━━━ */
+const Dot=({c,T,s})=><span style={{display:"inline-block",width:9,height:9,borderRadius:"50%",background:c==="low"?T.yellow:T.green,flexShrink:0,...s}}/>;
+const Footer=({T})=><div style={{textAlign:"center",padding:"24px 0 8px"}}><div style={{width:50,height:1,background:`linear-gradient(90deg,transparent,${T.accent},transparent)`,margin:"0 auto 14px",opacity:0.3}}/><span style={{fontSize:11,color:T.textSoft,letterSpacing:2.5,fontFamily:"'Cinzel',Georgia,serif"}}>DEVELOPED BY</span><div style={{fontSize:18,color:T.accent,fontFamily:"'Cinzel',Georgia,serif",fontWeight:700,marginTop:2}}>DigiRune Studios</div><div style={{fontSize:11,color:T.textSoft,marginTop:4}}>App © DigiRune Studios</div></div>;
+
+/* ━━━━ ATMOSPHERIC COMPONENTS ━━━━ */
+const Ornament=({T,width="60%",spacing="16px 0"})=><div style={{display:"flex",alignItems:"center",gap:10,margin:spacing,width,alignSelf:"center"}}>
+  <div style={{flex:1,height:1,background:T.sectionRule||`linear-gradient(90deg,transparent,${T.accent},transparent)`}}/>
+  <span style={{color:T.accent,fontSize:12,opacity:0.6,lineHeight:1}}>{T.ornChar||"⟡"}</span>
+  <div style={{flex:1,height:1,background:T.sectionRule||`linear-gradient(90deg,transparent,${T.accent},transparent)`}}/>
+</div>;
+
+const AtmoBg=({T})=>{
+  if(T.ornament==="simple")return null;
+  const isLight=T.bg.charAt(1)>="8"||T.bg==="#FFFFFF"||T.bg.includes("f7")||T.bg.includes("E8");
+  return<div style={{position:"fixed",top:0,left:0,right:0,bottom:0,backgroundImage:T.bodyGrad,pointerEvents:"none",zIndex:0}}>
+    {T.ornament==="circuit"&&<div style={{position:"absolute",top:0,left:0,right:0,bottom:0,backgroundImage:"repeating-linear-gradient(0deg,transparent,transparent 50px,rgba(0,240,255,0.018) 50px,rgba(0,240,255,0.018) 51px),repeating-linear-gradient(90deg,transparent,transparent 50px,rgba(0,240,255,0.018) 50px,rgba(0,240,255,0.018) 51px)",pointerEvents:"none"}}/>}
+    <div style={{position:"absolute",top:0,left:0,right:0,bottom:0,opacity:isLight?0.03:0.04,backgroundImage:"url(\"data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")",backgroundSize:"200px 200px",pointerEvents:"none"}}/>
+  </div>;
+};
+const Logo=({T,size=28})=><div style={{display:"flex",justifyContent:"center"}}><span style={{fontSize:size,fontWeight:700,fontFamily:"'Cinzel',Georgia,serif",color:T.text,letterSpacing:1}}>Sheet</span><span style={{fontSize:size,fontWeight:700,fontFamily:"'Cinzel',Georgia,serif",color:T.accent,letterSpacing:1,textShadow:`0 0 20px ${T.accentFaint}`}}>Snap</span></div>;
+
+const MoveBtn=({T,onClick,children,disabled})=><button onClick={onClick} disabled={disabled} style={{background:"none",border:"none",cursor:disabled?"default":"pointer",fontSize:10,color:disabled?"transparent":T.textMuted,padding:"1px 3px",lineHeight:1,opacity:disabled?0:0.7}}>{children}</button>;
+const MoveButtons=({T,si,fi,total,moveField})=><div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",flexShrink:0,gap:0}}><MoveBtn T={T} onClick={()=>moveField(si,fi,-1)} disabled={fi===0}>▲</MoveBtn><MoveBtn T={T} onClick={()=>moveField(si,fi,1)} disabled={fi===total-1}>▼</MoveBtn></div>;
+
+/* ━━━━ EDITABLE COMPONENTS ━━━━ */
+function EditableValue({value,onChange,T,style:sx,placeholder}){
+  const[ed,setEd]=useState(false);const[d,setD]=useState(value);const r=useRef(null);
+  useEffect(()=>{if(ed&&r.current)r.current.focus()},[ed]);
+  useEffect(()=>{setD(value)},[value]);
+  if(ed)return<input ref={r} value={d} onChange={e=>setD(e.target.value)} onBlur={()=>{onChange(d);setEd(false)}} onKeyDown={e=>{if(e.key==="Enter"){onChange(d);setEd(false)}}} style={{fontSize:16,fontWeight:600,color:T.text,background:T.accentFaint,border:`1px solid ${T.borderLight}`,borderRadius:6,padding:"4px 8px",outline:"none",width:"100%",fontFamily:"'EB Garamond',Georgia,serif",...sx}}/>;
+  return<span onClick={()=>setEd(true)} style={{cursor:"pointer",padding:"2px 0",minHeight:22,display:"inline-block",fontSize:16,fontWeight:600,color:value?T.text:T.textMuted,fontStyle:value?"normal":"italic",borderBottom:`1px dashed ${T.borderLight}`,...sx}}>{value||placeholder||"Tap to edit"}</span>;
+}
+
+function EditableLabel({value,onChange,T}){
+  const[ed,setEd]=useState(false);const[d,setD]=useState(value);const r=useRef(null);
+  useEffect(()=>{if(ed&&r.current)r.current.focus()},[ed]);
+  if(ed)return<input ref={r} value={d} onChange={e=>setD(e.target.value)} onBlur={()=>{onChange(d);setEd(false)}} onKeyDown={e=>{if(e.key==="Enter"){onChange(d);setEd(false)}}} style={{fontSize:13,color:T.textSoft,background:T.accentFaint,border:`1px solid ${T.borderLight}`,borderRadius:4,padding:"2px 6px",outline:"none",fontFamily:"'EB Garamond',Georgia,serif",width:"100%"}}/>;
+  return<span onClick={()=>setEd(true)} style={{fontSize:13,color:T.textSoft,cursor:"pointer",letterSpacing:0.3}}>{value}</span>;
+}
+
+/* ━━━━ SIGN IN ━━━━ */
+function SignInScreen({T,onSignIn}){
+  return<div style={{minHeight:"100vh",display:"flex",flexDirection:"column",background:T.bg,position:"relative",overflow:"hidden"}}>
+    <AtmoBg T={T}/>
+    <div style={{position:"absolute",top:"15%",left:"50%",transform:"translateX(-50%)",width:300,height:300,background:`radial-gradient(circle,${T.accentFaint} 0%,transparent 60%)`,borderRadius:"50%",opacity:0.6}}/>
+    <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"40px 28px",gap:0,position:"relative"}}>
+      <div style={{border:T.frame||`2px solid ${T.borderLight}`,borderRadius:14,background:T.surface,boxShadow:`0 4px 24px rgba(0,0,0,0.3), inset 0 0 20px ${T.accentFaint}`,padding:"36px 28px",display:"flex",flexDirection:"column",alignItems:"center",gap:28,width:"100%",maxWidth:360}}>
+      <div style={{textAlign:"center"}}><Logo T={T} size={40}/><Ornament T={T} width="60%" spacing="10px auto"/><div style={{fontSize:15,color:T.accent,fontStyle:"italic",opacity:0.8,letterSpacing:0.5}}>From paper to pocket.</div></div>
+      <p style={{fontSize:17,color:T.textSoft,textAlign:"center",margin:0,maxWidth:300,lineHeight:1.6}}>Photograph any character sheet. Get a digital character in seconds.</p>
+      <div style={{display:"flex",flexDirection:"column",gap:12,width:"100%",maxWidth:320}}>
+        <button onClick={onSignIn} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:10,padding:"16px 20px",background:"#fff",border:"none",borderRadius:14,cursor:"pointer",width:"100%",boxShadow:"0 2px 12px rgba(0,0,0,0.2)"}}>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="#000"><path d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.08-.48-3.24 0-1.44.62-2.2.44-3.06-.4C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.53 4.09zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/></svg>
+          <span style={{fontSize:17,fontWeight:600,color:"#000"}}>Continue with Apple</span>
+        </button>
+        <button onClick={onSignIn} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:10,padding:"16px 20px",background:T.surface,border:`1px solid ${T.borderLight}`,borderRadius:14,cursor:"pointer",width:"100%",boxShadow:`0 2px 12px ${T.accentFaint}`}}>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+          <span style={{fontSize:17,fontWeight:600,color:T.text}}>Continue with Google</span>
+        </button>
+      </div>
+      <p style={{fontSize:14,color:T.textMuted,textAlign:"center",margin:0,maxWidth:300,lineHeight:1.5,fontStyle:"italic"}}>Your data stays yours. No ads. No subscriptions. Ever.</p>
+      <Ornament T={T} width="30%" spacing="0 auto"/>
+      </div>
+    </div>
+    <Footer T={T}/>
+  </div>;
+}
+
+/* ━━━━ HOME SCREEN ━━━━ */
+function HomeScreen({T,characters,fallenHeroes,onStartCapture,onOpenChar,onOpenFallen,onDeleteChar,onArchiveChar,onRestoreChar,onDeleteFallen,onImport}){
+  const[showFallen,setShowFallen]=useState(false);
+  const importRef=useRef(null);
+  const handleImport=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>{try{const c=JSON.parse(ev.target.result);if(c.name&&c.sections){onImport(c)}}catch(err){}};r.readAsText(f);e.target.value=""};
+  return<div style={{minHeight:"100vh",display:"flex",flexDirection:"column",background:T.bg}}>
+    <AtmoBg T={T}/>
+    <div style={{textAlign:"center",padding:"28px 20px 14px",borderBottom:`1px solid ${T.border}`,background:T.headerBg||T.surface,position:"relative",overflow:"hidden"}}>
+      <div style={{position:"absolute",top:-30,left:"50%",transform:"translateX(-50%)",width:300,height:120,background:`radial-gradient(circle,${T.accentFaint} 0%,transparent 60%)`,borderRadius:"50%",opacity:0.8}}/>
+      <div style={{position:"relative"}}><Logo T={T.headerText?{...T,text:T.headerText,accent:T.nameColor||T.accent}:T}/><div style={{display:"flex",alignItems:"center",gap:10,justifyContent:"center",margin:"8px 0 0"}}><div style={{flex:1,maxWidth:80,height:1,background:T.sectionRule}}/><div style={{fontSize:14,color:T.headerText||T.accent,fontStyle:"italic",opacity:0.8,letterSpacing:0.5}}>From paper to pocket.</div><div style={{flex:1,maxWidth:80,height:1,background:T.sectionRule}}/></div></div>
+    </div>
+    <div style={{flex:1,padding:8,overflowY:"auto"}}>
+      <div style={{border:T.frame||`2px solid ${T.borderLight}`,borderRadius:14,background:T.surface,boxShadow:`0 4px 24px rgba(0,0,0,0.3), inset 0 0 20px ${T.accentFaint}`,padding:"20px 22px",display:"flex",flexDirection:"column",gap:18,position:"relative"}}>
+      {characters.length>0&&<div style={{display:"flex",flexDirection:"column",gap:8}}>
+        <span style={{fontSize:14,color:T.textMuted,letterSpacing:1.5,fontFamily:"'Cinzel',Georgia,serif"}}>YOUR CHARACTERS</span>
+        {characters.map((c,i)=>{const ct=c.themeKey&&THEMES[c.themeKey]?THEMES[c.themeKey]:T;return<div key={i} style={{display:"flex",alignItems:"center",gap:0}}>
+          <button onClick={()=>onOpenChar(i)} style={{flex:1,display:"flex",alignItems:"center",gap:14,padding:"16px 18px",background:`linear-gradient(135deg,${T.surface},${ct.accentFaint})`,border:`1px solid ${T.border}`,borderLeft:`3px solid ${ct.accent}`,borderRadius:"14px 0 0 14px",cursor:"pointer",textAlign:"left",boxShadow:`0 2px 12px ${ct.accentFaint}`}}>
+            <div style={{width:46,height:46,borderRadius:13,background:c.avatarImg?`url(${c.avatarImg})`:`linear-gradient(135deg,${ct.accentFaint},transparent)`,backgroundSize:"cover",backgroundPosition:c.avatarPos?`${c.avatarPos.x}% ${c.avatarPos.y}%`:"center",border:`1.5px solid ${ct.borderLight}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:`0 2px 8px ${ct.accentFaint}, 0 0 16px ${ct.accentFaint}`,overflow:"hidden"}}>{!c.avatarImg&&<span style={{fontSize:21,fontWeight:700,color:ct.accent,fontFamily:"'Cinzel',Georgia,serif"}}>{c.name.charAt(0)}</span>}</div>
+            <div style={{flex:1}}><div style={{fontSize:18,fontWeight:700,color:T.text,fontFamily:"'Cinzel',Georgia,serif",textShadow:`0 0 20px ${ct.accentFaint}`}}>{c.name}</div><div style={{fontSize:14,color:T.textMuted,marginTop:2}}>{c.system}</div></div>
+          </button>
+          <button onClick={()=>onArchiveChar(i)} style={{padding:"16px 12px",background:T.surface,border:`1px solid ${T.border}`,borderLeft:"none",cursor:"pointer",fontSize:15,color:T.textMuted,alignSelf:"stretch",display:"flex",alignItems:"center"}} title="Archive">⚔</button>
+          <button onClick={()=>onDeleteChar(i)} style={{padding:"16px 12px",background:T.surface,border:`1px solid ${T.border}`,borderLeft:"none",borderRadius:"0 14px 14px 0",cursor:"pointer",fontSize:15,color:T.textMuted,alignSelf:"stretch",display:"flex",alignItems:"center"}} title="Delete">✕</button>
+        </div>})}
+      </div>}
+      <Ornament T={T} width="50%" spacing="4px auto 12px"/>
+      <h1 style={{fontSize:26,fontWeight:700,fontFamily:"'Cinzel',Georgia,serif",color:T.nameColor||T.text,margin:0,textAlign:"center",textShadow:T.nameGlow}}>{characters.length>0?"Add Another Character":"Scan Your Character"}</h1>
+      <p style={{fontSize:17,lineHeight:1.6,color:T.textSoft,margin:0,textAlign:"center",maxWidth:360,alignSelf:"center"}}>Upload your character sheet pages — any game, any system. Your character lives on your devices.</p>
+      <div style={{display:"flex",flexDirection:"column",gap:12,marginTop:8}}>
+        <button onClick={()=>onStartCapture("camera")} style={{display:"flex",alignItems:"center",gap:16,padding:"18px 20px",background:`linear-gradient(135deg,${T.surface},${T.accentFaint})`,border:`1px solid ${T.borderLight}`,borderTop:`3px solid ${T.accent}`,borderRadius:14,cursor:"pointer",textAlign:"left",boxShadow:`0 2px 12px ${T.accentFaint}`}}>
+          <div style={{width:50,height:50,borderRadius:14,background:`linear-gradient(135deg,${T.accentFaint},transparent)`,border:`1.5px solid ${T.borderLight}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><CameraIcon T={T}/></div>
+          <div><div style={{fontSize:18,fontWeight:700,color:T.text,fontFamily:"'Cinzel',Georgia,serif"}}>Take Photos</div><div style={{fontSize:15,color:T.textMuted,lineHeight:1.4,marginTop:2}}>Use your camera to photograph each page</div></div>
+        </button>
+        <button onClick={()=>onStartCapture("upload")} style={{display:"flex",alignItems:"center",gap:16,padding:"18px 20px",background:`linear-gradient(135deg,${T.surface},${T.accentFaint})`,border:`1px solid ${T.borderLight}`,borderTop:`3px solid ${T.accent}`,borderRadius:14,cursor:"pointer",textAlign:"left",boxShadow:`0 2px 12px ${T.accentFaint}`}}>
+          <div style={{width:50,height:50,borderRadius:14,background:`linear-gradient(135deg,${T.accentFaint},transparent)`,border:`1.5px solid ${T.borderLight}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><UploadIcon T={T}/></div>
+          <div><div style={{fontSize:18,fontWeight:700,color:T.text,fontFamily:"'Cinzel',Georgia,serif"}}>Upload from Device</div><div style={{fontSize:15,color:T.textMuted,lineHeight:1.4,marginTop:2}}>Choose photos already on your device</div></div>
+        </button>
+      </div>
+      <input ref={importRef} type="file" accept=".json" onChange={handleImport} style={{display:"none"}}/>
+      <button onClick={()=>importRef.current?.click()} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"14px",background:"none",border:`1px solid ${T.borderLight}`,borderRadius:12,cursor:"pointer",width:"100%"}}><span style={{fontSize:15,color:T.textSoft}}>⬆ Import Character from Backup</span></button>
+      {fallenHeroes.length>0&&<div style={{marginTop:12}}>
+        <button onClick={()=>setShowFallen(!showFallen)} style={{display:"flex",alignItems:"center",gap:8,background:"none",border:"none",cursor:"pointer",padding:"8px 0",width:"100%"}}>
+          <span style={{fontSize:14,color:T.textMuted,letterSpacing:1.5,fontFamily:"'Cinzel',Georgia,serif"}}>FALLEN HEROES</span>
+          <span style={{fontSize:12,color:T.textMuted}}>({fallenHeroes.length}) {showFallen?"▾":"▸"}</span>
+        </button>
+        {showFallen&&<div style={{display:"flex",flexDirection:"column",gap:8,marginTop:4}}>
+          {fallenHeroes.map((c,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:0,animation:"fadeIn 0.2s ease"}}>
+            <button onClick={()=>onOpenFallen(i)} style={{flex:1,display:"flex",alignItems:"center",gap:14,padding:"16px 18px",background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${T.textMuted}`,borderRadius:"14px 0 0 14px",cursor:"pointer",textAlign:"left",opacity:0.65}}>
+              <div style={{width:46,height:46,borderRadius:13,background:"rgba(255,255,255,0.03)",border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><span style={{fontSize:21,fontWeight:700,color:T.textMuted,fontFamily:"'Cinzel',Georgia,serif"}}>{c.name.charAt(0)}</span></div>
+              <div style={{flex:1}}><div style={{fontSize:18,fontWeight:700,color:T.textMuted,fontFamily:"'Cinzel',Georgia,serif"}}>{c.name}</div><div style={{fontSize:13,color:T.textMuted,marginTop:2}}>{c.system} · Archived {c.archivedAt?new Date(c.archivedAt).toLocaleDateString():""}</div></div>
+            </button>
+            <button onClick={()=>onRestoreChar(i)} style={{padding:"16px 12px",background:T.surface,border:`1px solid ${T.border}`,borderLeft:"none",cursor:"pointer",fontSize:14,color:T.accent,alignSelf:"stretch",display:"flex",alignItems:"center"}} title="Restore">↩</button>
+            <button onClick={()=>onDeleteFallen(i)} style={{padding:"16px 12px",background:T.surface,border:`1px solid ${T.border}`,borderLeft:"none",borderRadius:"0 14px 14px 0",cursor:"pointer",fontSize:15,color:T.textMuted,alignSelf:"stretch",display:"flex",alignItems:"center"}} title="Delete">✕</button>
+          </div>)}
+        </div>}
+      </div>}
+      <Ornament T={T} width="30%" spacing="12px auto 0"/>
+      </div>
+    </div>
+    <Footer T={T}/>
+  </div>;
+}
+
+/* ━━━━ CAPTURE SCREEN ━━━━ */
+function CaptureScreen({T,onBack,onScan}){
+  const[images,setImages]=useState([]);const fileRef=useRef(null);const camRef=useRef(null);
+  const handleFiles=e=>{Array.from(e.target.files).forEach(file=>{if(!file.type.startsWith("image/"))return;const reader=new FileReader();reader.onload=ev=>setImages(prev=>[...prev,{dataUrl:ev.target.result,name:file.name}]);reader.readAsDataURL(file)});e.target.value=""};
+  return<div style={{minHeight:"100vh",display:"flex",flexDirection:"column",background:T.bg,padding:8}}>
+    <AtmoBg T={T}/>
+    <div style={{flex:1,border:T.frame||`2px solid ${T.borderLight}`,borderRadius:14,background:T.surface,boxShadow:`0 4px 24px rgba(0,0,0,0.3), inset 0 0 20px ${T.accentFaint}`,overflow:"hidden",display:"flex",flexDirection:"column"}}>
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 16px",borderBottom:`1px solid ${T.border}`,background:T.headerBg||T.surface}}>
+      <button onClick={onBack} style={{display:"flex",alignItems:"center",gap:4,background:"none",border:"none",cursor:"pointer"}}><BackIcon T={{...T,text:T.headerText||T.text}}/><span style={{fontSize:16,color:T.headerText||T.textMuted}}>Cancel</span></button>
+      <span style={{fontSize:17,fontWeight:600,color:T.headerText||T.text,fontFamily:"'Cinzel',Georgia,serif"}}>Add Pages</span><div style={{width:70}}/>
+    </div>
+    <div style={{flex:1,padding:"20px 22px",display:"flex",flexDirection:"column",gap:20}}>
+      <div style={{padding:"14px 16px",background:T.surface,borderRadius:10,border:`1px solid ${T.border}`}}><p style={{fontSize:17,color:T.textSoft,margin:0,lineHeight:1.5}}>{images.length===0?"Add photos of your character sheet pages. Any system, any format.":`${images.length} ${images.length===1?"page":"pages"} added. Add more or tap Scan when ready.`}</p></div>
+      {images.length>0&&<div style={{display:"flex",gap:10,flexWrap:"wrap"}}>{images.map((img,i)=><div key={i} style={{position:"relative",width:90,height:120,borderRadius:10,overflow:"hidden",border:`1px solid ${T.border}`}}><img src={img.dataUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/><div style={{position:"absolute",bottom:0,left:0,right:0,padding:"3px 6px",background:"rgba(0,0,0,0.7)",display:"flex",justifyContent:"space-between",alignItems:"center"}}><span style={{fontSize:11,color:T.text}}>Pg {i+1}</span><button onClick={()=>setImages(p=>p.filter((_,j)=>j!==i))} style={{background:"none",border:"none",color:T.textMuted,fontSize:14,cursor:"pointer"}}>✕</button></div></div>)}</div>}
+      <input ref={fileRef} type="file" accept="image/*" multiple onChange={handleFiles} style={{display:"none"}}/>
+      <input ref={camRef} type="file" accept="image/*" capture="environment" onChange={handleFiles} style={{display:"none"}}/>
+      <div style={{display:"flex",gap:12}}>
+        <button onClick={()=>camRef.current?.click()} style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"14px 12px",background:"none",border:`1px dashed ${T.borderLight}`,borderRadius:12,cursor:"pointer"}}><CameraIcon T={T}/><span style={{fontSize:17,color:T.accent}}>Camera</span></button>
+        <button onClick={()=>fileRef.current?.click()} style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"14px 12px",background:"none",border:`1px dashed ${T.borderLight}`,borderRadius:12,cursor:"pointer"}}><UploadIcon T={T}/><span style={{fontSize:17,color:T.accent}}>Upload</span></button>
+      </div>
+      {images.length>0&&<button onClick={()=>onScan(images)} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4,padding:"18px 24px",background:`linear-gradient(135deg,${T.accent},${T.accentBright})`,border:"none",borderRadius:14,cursor:"pointer",marginTop:8,boxShadow:`0 4px 24px ${T.accentFaint}, 0 0 40px ${T.accentFaint}`,position:"relative"}}><span style={{fontSize:20,fontWeight:700,color:T.bg,fontFamily:"'Cinzel',Georgia,serif",letterSpacing:1}}>Scan Character</span><span style={{fontSize:15,color:"rgba(10,10,12,0.6)"}}>{images.length} {images.length===1?"page":"pages"} ready</span></button>}
+    </div>
+    </div>
+  </div>;
+}
+
+/* ━━━━ PROCESSING SCREEN ━━━━ */
+function ProcessingScreen({T,images,onComplete,onError}){
+  const[step,setStep]=useState(0);const[error,setError]=useState(null);const ran=useRef(false);
+  useEffect(()=>{
+    if(ran.current)return;ran.current=true;
+    (async()=>{
+      try{setStep(1);
+        const content=[];images.forEach((img,i)=>{content.push({type:"image",source:{type:"base64",media_type:img.dataUrl.split(";")[0].split(":")[1],data:img.dataUrl.split(",")[1]}});if(images.length>1)content.push({type:"text",text:`(Page ${i+1} of ${images.length} of the SAME character sheet.)`})});
+        content.push({type:"text",text:PROMPT});setStep(2);
+        const res=await fetch(API_URL,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:4096,messages:[{role:"user",content}]})});
+        if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e.error?.message||`API ${res.status}`)}
+        const data=await res.json();const text=data.content.filter(b=>b.type==="text").map(b=>b.text).join("");setStep(3);
+        const parsed=JSON.parse(text.replace(/```json\s*/g,"").replace(/```\s*/g,"").trim());
+        if(!parsed.name||!parsed.sections)throw new Error("Invalid extraction");
+        /* Validate & sanitize */
+        parsed.name=String(parsed.name||"Unknown Character");
+        parsed.name_confidence=(parsed.name_confidence==="low")?"low":"high";
+        parsed.system=String(parsed.system||"Unknown System");
+        parsed.system_confidence=(parsed.system_confidence==="low")?"low":"high";
+        parsed.sections=(parsed.sections||[]).filter(s=>s&&s.title).map((s,si)=>({id:s.id||`sec_${si}`,title:String(s.title),fields:(s.fields||[]).filter(f=>f&&f.label).map((f,fi)=>({id:f.id||`f_${si}_${fi}`,label:String(f.label),value:String(f.value??""),confidence:f.confidence==="low"?"low":"high"}))})).filter(s=>s.fields.length>0);
+        if(!parsed.sections.length)throw new Error("No readable sections found");
+        setTimeout(()=>onComplete(parsed),800);
+      }catch(err){setError(err.message)}
+    })();
+  },[]);
+  const steps=[{label:"Reading your character sheets...",done:step>1},{label:"Extracting stats and abilities...",done:step>2},{label:"Building your digital character...",done:false}];
+  if(error)return<div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:T.bg,padding:"40px 28px",gap:20}}><AtmoBg T={T}/><Logo T={T}/><div style={{padding:"16px 20px",background:"rgba(217,79,79,0.1)",border:"1px solid rgba(217,79,79,0.3)",borderRadius:12,maxWidth:320,textAlign:"center",position:"relative"}}><div style={{fontSize:17,color:"#F2A0A0",lineHeight:1.5}}>{error}</div></div><button onClick={onError} style={{padding:"14px 28px",background:T.surface,border:`1px solid ${T.border}`,borderRadius:12,cursor:"pointer",fontSize:16,color:T.text,position:"relative"}}>Try Again</button></div>;
+  return<div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:T.bg,padding:"40px 28px",gap:36}}>
+    <AtmoBg T={T}/>
+    <div style={{border:T.frame||`2px solid ${T.borderLight}`,borderRadius:14,background:T.surface,boxShadow:`0 4px 24px rgba(0,0,0,0.3), inset 0 0 20px ${T.accentFaint}`,padding:"40px 28px",display:"flex",flexDirection:"column",alignItems:"center",gap:28,width:"100%",maxWidth:400,position:"relative"}}>
+    <Logo T={T}/>
+    <Ornament T={T} width="50%" spacing="0 auto"/>
+    <div style={{display:"flex",flexDirection:"column",gap:20,width:"100%",maxWidth:320}}>{steps.map((st,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:14,opacity:i<=step?1:0.25,transition:"opacity 0.6s ease"}}><div style={{width:32,height:32,borderRadius:"50%",border:`2px solid ${st.done?T.green:i===step?T.accent:T.border}`,background:st.done?T.green:"none",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"all 0.5s ease",boxShadow:i===step&&!st.done?`0 0 12px ${T.accent}40`:"none"}}>{st.done&&<CheckIcon/>}</div><span style={{fontSize:17,color:i<=step?T.text:T.textMuted,transition:"color 0.5s ease"}}>{st.label}</span></div>)}</div>
+    <div style={{width:"100%",maxWidth:320,height:3,background:T.accentFaint,borderRadius:2,overflow:"hidden"}}><div style={{height:"100%",width:step===0?"10%":step===1?"35%":step===2?"70%":"95%",background:`linear-gradient(90deg,${T.accent},${T.accentBright})`,borderRadius:2,transition:"width 1.5s ease-out"}}/></div>
+    <p style={{fontSize:16,color:T.textMuted,margin:0,fontStyle:"italic"}}>This usually takes just a few seconds.</p>
+    <Ornament T={T} width="40%" spacing="0 auto"/>
+    </div>
+  </div>;
+}
+
+/* ━━━━ SECTION BLOCK ━━━━ */
+function SectionBlock({sec,si,style,T,editing,updateField,removeField,moveField,addField,updateSectionTitle,removeSection,moveSection,totalSections,isOpen,onToggle}){
+  const[editTitle,setEditTitle]=useState(false);const[titleDraft,setTitleDraft]=useState(sec.title);const titleRef=useRef(null);
+  useEffect(()=>{if(editTitle&&titleRef.current)titleRef.current.focus()},[editTitle]);
+  return<div style={{background:T.surface,borderRadius:14,border:`1px solid ${T.border}`,borderLeft:`3px solid ${T.accent}`,overflow:"hidden",boxShadow:`0 2px 12px ${T.accentFaint}`}}>
+    <div style={{display:"flex",alignItems:"center",padding:"13px 16px",gap:6,position:"relative"}}>
+      <div style={{position:"absolute",bottom:0,left:16,right:16,height:1,background:T.sectionRule}}/>
+      {editing&&<MoveButtons T={T} si={0} fi={si} total={totalSections} moveField={(_,i,dir)=>moveSection(i,dir)}/>}
+      <button onClick={onToggle} style={{flex:1,display:"flex",alignItems:"center",justifyContent:"space-between",background:"none",border:"none",cursor:"pointer",padding:0}}>
+        {editTitle?<input ref={titleRef} value={titleDraft} onChange={e=>setTitleDraft(e.target.value)} onBlur={()=>{updateSectionTitle(si,titleDraft);setEditTitle(false)}} onKeyDown={e=>{if(e.key==="Enter"){updateSectionTitle(si,titleDraft);setEditTitle(false)}}} onClick={e=>e.stopPropagation()} style={{fontSize:16,fontWeight:700,color:T.accent,fontFamily:"'Cinzel',Georgia,serif",background:T.accentFaint,border:`1px solid ${T.borderLight}`,borderRadius:4,padding:"2px 8px",outline:"none",width:"100%"}}/>
+        :<span onDoubleClick={e=>{if(editing){e.stopPropagation();setEditTitle(true)}}} style={{fontSize:15,fontWeight:700,color:T.accent,fontFamily:"'Cinzel',Georgia,serif",letterSpacing:0.5}}>{sec.title}</span>}
+        <span style={{fontSize:14,color:T.accentDim,flexShrink:0,marginLeft:8}}>{sec.fields.length} {isOpen?"▾":"▸"}</span>
+      </button>
+      {editing&&<button onClick={()=>removeSection(si)} style={{background:"none",border:"none",cursor:"pointer",padding:"2px 4px",fontSize:14,color:T.textMuted,flexShrink:0}}>✕</button>}
+    </div>
+    {isOpen&&<div style={{padding:"0 16px 16px",animation:"fadeIn 0.2s ease"}}>
+      {style==="grid"&&<div style={{display:"flex",flexWrap:"wrap",gap:10}}>{sec.fields.map((f,fi)=><div key={f.id} style={{flex:"1 1 22%",minWidth:74,background:`linear-gradient(160deg,${T.accentFaint},transparent)`,border:`1.5px solid ${T.borderLight}`,borderRadius:12,padding:"12px 8px 10px",textAlign:"center",position:"relative",display:"flex",flexDirection:"column",gap:3,boxShadow:`inset 0 1px 8px ${T.accentFaint}, 0 2px 8px ${T.accentFaint}`}}>{editing&&<button onClick={()=>removeField(si,fi)} style={{position:"absolute",top:2,right:4,background:"none",border:"none",cursor:"pointer",fontSize:11,color:T.textMuted}}>✕</button>}<EditableLabel value={f.label} onChange={v=>updateField(si,fi,"label",v)} T={T}/><EditableValue value={f.value} onChange={v=>updateField(si,fi,"value",v)} T={T} style={{fontSize:28,fontWeight:700,fontFamily:"'Cinzel',Georgia,serif",display:"block",textAlign:"center",borderBottom:"none",color:T.accent,textShadow:`0 0 12px ${T.accentFaint}`}}/></div>)}</div>}
+      {style==="skills"&&sec.fields.map((f,fi)=>{const pct=parseInt(f.value);const isPct=!isNaN(pct)&&f.value.includes("%");return<div key={f.id} style={{padding:"5px 0"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:2}}><span style={{display:"flex",alignItems:"center",gap:4,flex:1}}>{editing&&<MoveButtons T={T} si={si} fi={fi} total={sec.fields.length} moveField={moveField}/>}<Dot c={f.confidence} T={T}/><EditableLabel value={f.label} onChange={v=>updateField(si,fi,"label",v)} T={T}/></span><div style={{display:"flex",alignItems:"center",gap:4}}><EditableValue value={f.value} onChange={v=>updateField(si,fi,"value",v)} T={T} style={{fontSize:14,fontWeight:600,color:T.accent,textAlign:"right",maxWidth:60}}/>{editing&&<button onClick={()=>removeField(si,fi)} style={{background:"none",border:"none",cursor:"pointer",fontSize:12,color:T.textMuted}}>✕</button>}</div></div>{isPct&&<div style={{height:3,background:T.accentFaint,borderRadius:2,overflow:"hidden"}}><div style={{height:"100%",width:`${Math.min(pct,100)}%`,background:`linear-gradient(90deg,${T.accentDim},${T.accent})`,borderRadius:2}}/></div>}</div>})}
+      {style==="spells"&&<>{[...new Set(sec.fields.map(f=>f.label))].map(group=><div key={group} style={{marginBottom:12}}><div style={{fontSize:13,color:T.textSoft,letterSpacing:1.5,fontFamily:"'Cinzel',Georgia,serif",marginBottom:8,textTransform:"uppercase"}}>{group}s</div><div style={{display:"flex",flexWrap:"wrap",gap:8}}>{sec.fields.map((f,fi)=>{if(f.label!==group)return null;return<span key={f.id} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"7px 14px",background:`linear-gradient(135deg,${T.accentFaint},transparent)`,border:`1px solid ${T.borderLight}`,borderRadius:20,boxShadow:`0 0 12px ${T.accentFaint}, 0 1px 4px ${T.accentFaint}`}}><Dot c={f.confidence} T={T} s={{width:6,height:6}}/><EditableValue value={f.value} onChange={v=>updateField(si,fi,"value",v)} T={T} style={{fontSize:14,borderBottom:"none",padding:0}}/>{editing&&<button onClick={()=>removeField(si,fi)} style={{background:"none",border:"none",cursor:"pointer",fontSize:11,color:T.textMuted,marginLeft:2}}>✕</button>}</span>})}</div></div>)}</>}
+      {style==="default"&&sec.fields.map((f,fi)=><div key={f.id} style={{display:"flex",alignItems:"flex-start",gap:8,padding:"8px 0",borderBottom:`1px solid ${T.accentFaint}`}}>{editing&&<MoveButtons T={T} si={si} fi={fi} total={sec.fields.length} moveField={moveField}/>}<Dot c={f.confidence} T={T} s={{marginTop:8}}/><div style={{flex:1,display:"flex",flexDirection:"column",gap:2}}><EditableLabel value={f.label} onChange={v=>updateField(si,fi,"label",v)} T={T}/><EditableValue value={f.value} onChange={v=>updateField(si,fi,"value",v)} T={T}/></div>{editing&&<button onClick={()=>removeField(si,fi)} style={{background:"none",border:"none",cursor:"pointer",fontSize:13,color:T.textMuted,padding:"4px",flexShrink:0}}>✕</button>}</div>)}
+      {editing&&<button onClick={()=>addField(si)} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,padding:"8px",background:"none",border:`1px dashed ${T.borderLight}`,borderRadius:8,cursor:"pointer",width:"100%",marginTop:6}}><span style={{fontSize:14,color:T.accentDim}}>+ Add Field</span></button>}
+    </div>}
+  </div>;
+}
+
+/* ━━━━ AVATAR EDITOR ━━━━ */
+function AvatarEditor({data,setData,snap,T,editing}){
+  const fileRef=useRef(null);
+  const[dragging,setDragging]=useState(false);
+  const startPos=useRef(null);const startOff=useRef(null);
+  const img=data.avatarImg||null;
+  const pos=data.avatarPos||{x:50,y:50};
+  const handleFile=e=>{const f=e.target.files[0];if(!f||!f.type.startsWith("image/"))return;const r=new FileReader();r.onload=ev=>{const img2=new Image();img2.onload=()=>{const c=document.createElement("canvas");const s=200;c.width=s;c.height=s;const ctx=c.getContext("2d");const min=Math.min(img2.width,img2.height);const sx=(img2.width-min)/2;const sy=(img2.height-min)/2;ctx.drawImage(img2,sx,sy,min,min,0,0,s,s);const compressed=c.toDataURL("image/jpeg",0.8);snap(data);setData(p=>({...p,avatarImg:compressed,avatarPos:{x:50,y:50}}))};img2.src=ev.target.result};r.readAsDataURL(f);e.target.value=""};
+  const handleStart=e=>{if(!img||!editing)return;e.preventDefault();const t=e.touches?e.touches[0]:e;startPos.current={x:t.clientX,y:t.clientY};startOff.current={...pos};setDragging(true)};
+  const handleMove=e=>{if(!dragging||!startPos.current)return;e.preventDefault();const t=e.touches?e.touches[0]:e;const dx=t.clientX-startPos.current.x;const dy=t.clientY-startPos.current.y;const nx=Math.max(0,Math.min(100,startOff.current.x-dx*0.5));const ny=Math.max(0,Math.min(100,startOff.current.y-dy*0.5));setData(p=>({...p,avatarPos:{x:nx,y:ny}}))};
+  const handleEnd=()=>{if(dragging){setDragging(false);startPos.current=null}};
+  useEffect(()=>{if(dragging){const mo=e=>handleMove(e);const up=()=>handleEnd();window.addEventListener("mousemove",mo);window.addEventListener("mouseup",up);window.addEventListener("touchmove",mo,{passive:false});window.addEventListener("touchend",up);return()=>{window.removeEventListener("mousemove",mo);window.removeEventListener("mouseup",up);window.removeEventListener("touchmove",mo);window.removeEventListener("touchend",up)}}});
+  return<div style={{position:"relative",width:90,height:90}}>
+    <input ref={fileRef} type="file" accept="image/*" onChange={handleFile} style={{display:"none"}}/>
+    {/* Outer decorative ring */}
+    <div style={{position:"absolute",top:0,left:0,width:90,height:90,borderRadius:22,border:`1.5px solid ${T.accent}`,opacity:0.3,pointerEvents:"none"}}/>
+    <div onClick={()=>editing&&!dragging&&fileRef.current?.click()} onMouseDown={img?handleStart:undefined} onTouchStart={img?handleStart:undefined} style={{width:80,height:80,borderRadius:18,background:img?`url(${img})`:`linear-gradient(135deg,${T.accentFaint},rgba(255,255,255,0.03))`,backgroundSize:"cover",backgroundPosition:`${pos.x}% ${pos.y}%`,border:`2px solid ${T.accent}`,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:`0 4px 20px ${T.accentFaint}, 0 0 30px ${T.accentFaint}`,cursor:editing?(img?"grab":"pointer"):"default",overflow:"hidden",touchAction:"none",margin:"5px"}}>
+      {!img&&<span style={{fontSize:34,fontWeight:700,color:T.accent,fontFamily:"'Cinzel',Georgia,serif"}}>{data.name.charAt(0)||"?"}</span>}
+    </div>
+    {editing&&<div style={{position:"absolute",bottom:-2,right:-2,width:22,height:22,borderRadius:"50%",background:`linear-gradient(135deg,#D4A843,#F0CC6B)`,border:`2px solid ${T.bg}`,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",boxShadow:"0 1px 3px rgba(0,0,0,0.3)"}} onClick={()=>fileRef.current?.click()}><span style={{fontSize:11,color:"#0A0A0C",fontWeight:900}}>📷</span></div>}
+    {editing&&img&&<div style={{textAlign:"center",marginTop:4}}><span style={{fontSize:12,color:T.textSoft}}>Drag to reposition</span></div>}
+  </div>;
+}
+
+/* ━━━━ CHARACTER SCREEN ━━━━ */
+function CharacterScreen({T,character,isFallen,onBack,onSave,onArchive,themeKey,setThemeKey}){
+  const[data,setData]=useState(JSON.parse(JSON.stringify(character)));
+  const[noteInput,setNoteInput]=useState("");const noteRef=useRef(null);
+  const[editing,setEditing]=useState(false);
+  const[showHelp,setShowHelp]=useState(false);
+  const[undoStack,setUndoStack]=useState([]);
+  const[verifyOnly,setVerifyOnly]=useState(false);
+  const[activeSec,setActiveSec]=useState(0);
+  const swipeRef=useRef(null);const swipeStart=useRef(null);
+  const handleSwipe=(dir)=>{setActiveSec(s=>{const next=s+dir;if(next<0||next>data.sections.length)return s;return next})};
+  useEffect(()=>{
+    const el=swipeRef.current;if(!el)return;
+    let tx=0,ty=0,ts=0,ok=true;
+    const onStart=e=>{if(e.touches.length!==1)return;tx=e.touches[0].clientX;ty=e.touches[0].clientY;ts=Date.now();ok=true};
+    const onMove=e=>{if(!ok||e.touches.length!==1)return;if(Math.abs(e.touches[0].clientY-ty)>Math.abs(e.touches[0].clientX-tx))ok=false};
+    const onEnd=e=>{if(!ok)return;const dx=e.changedTouches[0].clientX-tx;const dt=Date.now()-ts;if(dt>400||Math.abs(dx)<50)return;const tag=e.target.tagName;if(tag==="INPUT"||tag==="TEXTAREA"||tag==="SELECT")return;handleSwipe(dx<0?1:-1)};
+    el.addEventListener("touchstart",onStart,{passive:true});el.addEventListener("touchmove",onMove,{passive:true});el.addEventListener("touchend",onEnd,{passive:true});
+    return()=>{el.removeEventListener("touchstart",onStart);el.removeEventListener("touchmove",onMove);el.removeEventListener("touchend",onEnd)};
+  });
+  const initOpen=character.openSections||character.sections.slice(0,6).map(s=>s.id);
+  const[openSections,setOpenSections]=useState(initOpen);
+  const toggleSection=id=>{const next=openSections.includes(id)?openSections.filter(x=>x!==id):[...openSections,id];setOpenSections(next);setData(d=>({...d,openSections:next}));};
+  useEffect(()=>{if(character.themeKey&&THEMES[character.themeKey])setThemeKey(character.themeKey)},[]);
+  const didMount=useRef(false);
+  useEffect(()=>{if(!didMount.current){didMount.current=true;return;}onSave(data)},[data]);
+  const handleTheme=key=>{setThemeKey(key);setData(p=>({...p,themeKey:key}))};
+  const save=()=>{onSave(data);onBack()};
+  const snap=prev=>{setUndoStack(s=>{const n=[...s,JSON.stringify(prev)];return n.length>20?n.slice(-20):n})};
+  const undo=()=>{if(!undoStack.length)return;const prev=JSON.parse(undoStack[undoStack.length-1]);setUndoStack(s=>s.slice(0,-1));setData(prev)};
+  const addNote=()=>{if(!noteInput.trim())return;setData(p=>{snap(p);return{...p,sessionNotes:[...(p.sessionNotes||[]),{id:`n_${Date.now()}`,text:noteInput.trim(),timestamp:new Date().toISOString()}]}});setNoteInput("")};
+  const removeNote=nid=>{setData(p=>{snap(p);return{...p,sessionNotes:(p.sessionNotes||[]).filter(n=>n.id!==nid)}})};
+  const updateField=(si,fi,key,val)=>{setData(p=>{snap(p);const n=JSON.parse(JSON.stringify(p));n.sections[si].fields[fi][key]=val;if(key==="value")n.sections[si].fields[fi].confidence="high";return n})};
+  const removeField=(si,fi)=>{setData(p=>{snap(p);const n=JSON.parse(JSON.stringify(p));n.sections[si].fields.splice(fi,1);return n})};
+  const moveField=(si,fi,dir)=>{setData(p=>{snap(p);const n=JSON.parse(JSON.stringify(p));const f=n.sections[si].fields;const ni=fi+dir;if(ni<0||ni>=f.length)return p;[f[fi],f[ni]]=[f[ni],f[fi]];return n})};
+  const addField=si=>{setData(p=>{snap(p);const n=JSON.parse(JSON.stringify(p));n.sections[si].fields.push({id:`f_${Date.now()}`,label:"New Field",value:"",confidence:"high"});return n})};
+  const updateSectionTitle=(si,t)=>{setData(p=>{snap(p);const n=JSON.parse(JSON.stringify(p));n.sections[si].title=t;return n})};
+  const removeSection=si=>{setData(p=>{snap(p);const n=JSON.parse(JSON.stringify(p));n.sections.splice(si,1);return n})};
+  const moveSection=(si,dir)=>{setData(p=>{snap(p);const n=JSON.parse(JSON.stringify(p));const ni=si+dir;if(ni<0||ni>=n.sections.length)return p;[n.sections[si],n.sections[ni]]=[n.sections[ni],n.sections[si]];return n})};
+  const addSection=()=>{setData(p=>{snap(p);const n=JSON.parse(JSON.stringify(p));n.sections.push({id:`sec_${Date.now()}`,title:"New Section",fields:[{id:`f_${Date.now()}`,label:"New Field",value:"",confidence:"high"}]});return n})};
+  const updateName=v=>setData(p=>{snap(p);return{...p,name:v,name_confidence:"high"}});
+  const updateSystem=v=>setData(p=>{snap(p);return{...p,system:v,system_confidence:"high"}});
+  const getSectionStyle=sec=>{if(sec.fields.length<=10&&sec.fields.every(f=>!f.value.includes("%")&&f.value.length<8&&f.label.length<14))return"grid";if(sec.fields.some(f=>f.value.includes("%")))return"skills";if(sec.id==="spells"||sec.title.toLowerCase().includes("spell")||sec.title.toLowerCase().includes("cantrip")||sec.title.toLowerCase().includes("magic"))return"spells";return"default"};
+  const totalFields=data.sections.reduce((a,s)=>a+s.fields.length,0);
+  const lowConfCount=data.sections.reduce((a,s)=>a+s.fields.filter(f=>f.confidence==="low").length,0)+(data.name_confidence==="low"?1:0)+(data.system_confidence==="low"?1:0);
+
+  const secCount=data.sections.length+1; /* sections + journal */
+
+  return<div style={{minHeight:"100vh",display:"flex",flexDirection:"column",background:T.bg,padding:8}}>
+    <AtmoBg T={T}/>
+    {/* Help Modal */}
+    {showHelp&&<div onClick={()=>setShowHelp(false)} style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.7)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+      <div onClick={e=>e.stopPropagation()} style={{background:T.surface,border:`2px solid ${T.borderLight}`,borderRadius:16,padding:"24px 22px",maxWidth:380,width:"100%",maxHeight:"80vh",overflowY:"auto",boxShadow:`0 8px 40px rgba(0,0,0,0.5), 0 0 30px ${T.accentFaint}`}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}><span style={{fontSize:18,fontWeight:700,color:T.accent,fontFamily:"'Cinzel',Georgia,serif"}}>How to Use</span><button onClick={()=>setShowHelp(false)} style={{background:"none",border:"none",cursor:"pointer",fontSize:18,color:T.textMuted}}>✕</button></div>
+        <div style={{display:"flex",flexDirection:"column",gap:14,fontSize:15,color:T.textSoft,lineHeight:1.6}}>
+          <div><span style={{fontWeight:700,color:T.accent}}>✎ Edit</span> — Tap this button in the top-right corner to unlock advanced editing. While active, you can rearrange fields and sections, add new ones, or remove ones you don't need. Tap <span style={{fontWeight:700,color:T.accent}}>✓ Done</span> when you're finished.</div>
+          <div><span style={{fontWeight:700,color:T.accent}}>Changing values</span> — Tap any stat, name, or text on your character sheet to change it. You can also tap field labels (like "STR" or "Race") to rename them.</div>
+          <div><span style={{fontWeight:700,color:T.accent}}>Confidence dots</span> — The small dots next to each field show how confident the scan was. <span style={{color:T.green}}>Green</span> means the AI read it clearly. <span style={{color:T.yellow}}>Yellow</span> means you should double-check it against your paper sheet.</div>
+          <div><span style={{fontWeight:700,color:T.accent}}>Character portrait</span> — Tap the circle at the top with your character's initial to upload a photo of your mini, portrait art, or anything you like.</div>
+          <div><span style={{fontWeight:700,color:T.accent}}>Navigating sections</span> — The buttons below your character info (Ability Scores, Skills, etc.) jump to that section. You can also swipe left or right anywhere on the page to move between sections.</div>
+          <div><span style={{fontWeight:700,color:T.accent}}>Color themes</span> — The colored circles in the top bar change your character sheet's entire look. Pick one that fits your character's vibe.</div>
+          <div><span style={{fontWeight:700,color:T.accent}}>Journal</span> — The last section button. Use it to log notes after each game session, export your character as a backup file, or archive retired characters to Fallen Heroes.</div>
+          <div><span style={{fontWeight:700,color:T.accent}}>Undo</span> — Made a mistake? An undo button appears in the top-left after any change. Tap it to step back, up to 20 steps.</div>
+          <div><span style={{fontWeight:700,color:T.accent}}>Auto-saved</span> — Your changes are saved automatically as you make them.</div>
+        </div>
+        <button onClick={()=>setShowHelp(false)} style={{display:"flex",alignItems:"center",justifyContent:"center",padding:"12px",background:`linear-gradient(135deg,${T.accent},${T.accentBright})`,border:"none",borderRadius:10,cursor:"pointer",width:"100%",marginTop:18}}><span style={{fontSize:15,fontWeight:700,color:T.bg,fontFamily:"'Cinzel',Georgia,serif"}}>Got It</span></button>
+      </div>
+    </div>}
+
+    {/* ═══ GRIMOIRE FRAME ═══ */}
+    <div style={{flex:1,display:"flex",flexDirection:"column",border:T.frame||`2px solid ${T.borderLight}`,borderRadius:14,background:T.surface,boxShadow:`0 8px 40px rgba(0,0,0,0.5), 0 0 60px ${T.accentFaint}, inset 0 1px 0 ${T.accentFaint}, inset 0 0 20px ${T.accentFaint}`,overflow:"hidden",position:"relative"}}>
+
+      {/* Corner filigree */}
+      {["top:8px;left:8px;border-top;border-left","top:8px;right:8px;border-top;border-right","bottom:8px;left:8px;border-bottom;border-left","bottom:8px;right:8px;border-bottom;border-right"].map((cfg,i)=>{const[pos1,pos2,b1,b2]=cfg.split(";");return<React.Fragment key={i}><span style={{position:"absolute",[pos1.split(":")[0]]:pos1.split(":")[1],[pos2.split(":")[0]]:pos2.split(":")[1],width:20,height:20,[b1]:`2px solid ${T.accent}`,[b2]:`2px solid ${T.accent}`,opacity:0.3,pointerEvents:"none",zIndex:2,borderRadius:2}}/><span style={{position:"absolute",[pos1.split(":")[0]]:pos1.split(":")[1],[pos2.split(":")[0]]:pos2.split(":")[1],width:10,height:10,display:"flex",alignItems:"center",justifyContent:"center",pointerEvents:"none",zIndex:2}}><span style={{fontSize:8,color:T.accent,opacity:0.4}}>{T.ornChar}</span></span></React.Fragment>})}
+
+      {/* ── Top Bar ── */}
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"7px 12px",borderBottom:`1px solid ${T.border}`,background:T.headerBg||T.bg,flexShrink:0,zIndex:1}}>
+        <div style={{display:"flex",alignItems:"center",gap:6}}>
+          <button onClick={save} style={{display:"flex",alignItems:"center",gap:5,background:`linear-gradient(135deg,${T.accentDim},${T.accent})`,border:"none",borderRadius:8,padding:"5px 14px",cursor:"pointer",boxShadow:`0 1px 4px rgba(0,0,0,0.3)`}}><span style={{fontSize:14,color:T.headerText||T.bg}}>‹</span><span style={{fontSize:13,fontWeight:700,color:T.headerText||T.bg,fontFamily:"'Cinzel',Georgia,serif",letterSpacing:0.5}}>Back</span></button>
+          {undoStack.length>0&&<button onClick={undo} style={{display:"flex",alignItems:"center",gap:3,background:`linear-gradient(135deg,${T.accent},${T.accentBright})`,border:"none",borderRadius:8,padding:"4px 8px",cursor:"pointer",boxShadow:"0 1px 4px rgba(0,0,0,0.3)"}}><span style={{fontSize:12,fontWeight:700,color:T.bg,fontFamily:"'Cinzel',Georgia,serif"}}>↩</span></button>}
+        </div>
+        <div style={{display:"flex",gap:2,alignItems:"center"}}>
+          <button onClick={()=>setShowHelp(true)} style={{width:26,height:26,borderRadius:"50%",border:"none",background:`linear-gradient(135deg,${T.accentDim},${T.accent})`,cursor:"pointer",fontSize:13,fontWeight:900,color:T.headerText||T.bg,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontFamily:"'Cinzel',Georgia,serif",boxShadow:`0 1px 4px rgba(0,0,0,0.3)`,marginRight:2}}>?</button>
+          <button onClick={()=>setEditing(!editing)} style={{background:`linear-gradient(135deg,${editing?T.accent:T.accentDim},${editing?T.accentBright:T.accent})`,border:"none",borderRadius:8,padding:"5px 12px",cursor:"pointer",fontSize:11,fontWeight:700,color:T.headerText||T.bg,fontFamily:"'Cinzel',Georgia,serif",whiteSpace:"nowrap",boxShadow:`0 1px 4px rgba(0,0,0,0.3)`,letterSpacing:0.5}}>{editing?"✓ Done":"✎ Edit"}</button>
+          <div style={{width:1,height:16,background:T.borderLight,flexShrink:0}}/>
+          {Object.entries(THEMES).map(([key,theme])=>{const isLight=theme.icon==="#FFFFFF";const active=key===themeKey;return<button key={key} onClick={()=>handleTheme(key)} style={{background:"none",border:"none",cursor:"pointer",padding:3,margin:0,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,WebkitAppearance:"none"}}><span style={{width:active?18:13,height:active?18:13,borderRadius:"50%",border:active?`2px solid ${isLight?"#999":theme.icon}`:`1.5px solid ${isLight?"rgba(0,0,0,0.25)":"rgba(255,255,255,0.2)"}`,background:theme.icon,display:"block",transition:"all 0.2s",boxShadow:active?`0 0 8px ${isLight?"rgba(0,0,0,0.15)":theme.icon+"50"}`:"none"}}/></button>})}
+        </div>
+      </div>
+
+      {/* ── Page Area ── */}
+      <div ref={swipeRef} style={{flex:1,overflowY:"auto",overflowX:"hidden"}}>
+
+        {/* ══ COVER (always visible) ══ */}
+        <div style={{padding:"30px 20px 20px",display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
+          <div style={{display:"flex",alignItems:"center",gap:10,width:"70%",margin:"0 auto 16px"}}><div style={{flex:1,height:1,background:T.sectionRule}}/><span style={{color:T.accent,fontSize:14,opacity:0.5}}>{T.ornChar}</span><div style={{flex:1,height:1,background:T.sectionRule}}/></div>
+          <AvatarEditor data={data} setData={setData} snap={snap} T={T} editing={editing}/>
+          <div style={{textAlign:"center",margin:"12px 0 4px"}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6}}><EditableValue value={data.name} onChange={updateName} T={T} style={{fontSize:32,fontWeight:700,fontFamily:"'Cinzel',Georgia,serif",lineHeight:1.15,borderBottom:"none",textAlign:"center",textShadow:T.nameGlow,color:T.nameColor||T.text,animation:"nameGlow 4s ease-in-out infinite alternate"}}/><Dot c={data.name_confidence} T={T}/></div>
+          </div>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6}}><EditableValue value={data.system} onChange={updateSystem} T={T} style={{fontSize:13,color:T.accentDim,borderBottom:"none",letterSpacing:2,textTransform:"uppercase"}}/><Dot c={data.system_confidence} T={T} s={{width:5,height:5}}/></div>
+          <div style={{display:"flex",alignItems:"center",gap:10,width:"50%",margin:"14px auto"}}><div style={{flex:1,height:1,background:T.sectionRule}}/><span style={{color:T.accent,fontSize:10,opacity:0.4}}>{T.ornChar}</span><div style={{flex:1,height:1,background:T.sectionRule}}/></div>
+          {(()=>{const si=data.sections.findIndex(s=>s.id==="identity"||s.title.toLowerCase().includes("info"));if(si<0)return null;const info=data.sections[si];const tags=info.fields.map((f,fi)=>({f,fi})).filter(({f})=>f.value&&!/^\d+$/.test(f.value.trim())&&["race","occupation","class","alignment"].some(k=>f.id.toLowerCase().includes(k)||f.label.toLowerCase().includes(k))).slice(0,4);if(!tags.length)return null;return<div style={{display:"flex",flexWrap:"wrap",justifyContent:"center",alignItems:"center",gap:0,letterSpacing:0.8,fontFamily:"'Cinzel',Georgia,serif",fontSize:14,fontWeight:700,color:T.text,textTransform:"uppercase"}}>{tags.map(({f,fi},idx)=><React.Fragment key={f.id}>{idx>0&&<span style={{margin:"0 10px",opacity:0.7}}>·</span>}<span>{f.value}</span></React.Fragment>)}</div>})()}
+          <div style={{display:"flex",gap:14,padding:"14px 0 0",flexWrap:"wrap",alignItems:"center",justifyContent:"center"}}><div style={{display:"flex",alignItems:"center",gap:6,fontSize:15,color:T.textSoft}}><Dot c="high" T={T}/> Confident</div><div style={{display:"flex",alignItems:"center",gap:6,fontSize:15,color:T.textSoft}}><Dot c="low" T={T}/> Verify</div>{lowConfCount>0&&<button onClick={()=>setVerifyOnly(!verifyOnly)} style={{display:"flex",alignItems:"center",gap:5,padding:"5px 14px",background:verifyOnly?T.yellow:"none",border:`1.5px solid ${verifyOnly?T.yellow:T.borderLight}`,borderRadius:14,cursor:"pointer"}}><span style={{fontSize:14,fontWeight:700,color:verifyOnly?T.bg:T.yellow}}>{verifyOnly?"Show All":`${lowConfCount} to verify`}</span></button>}</div>
+          <div style={{fontSize:15,fontWeight:600,color:T.textSoft,marginTop:6}}>{totalFields} fields · {data.sections.length} sections</div>
+        </div>
+
+        {/* ══ DIVIDER ══ */}
+        <Ornament T={T} width="60%" spacing="4px auto 12px"/>
+
+        {/* ══ CHIP GRID ══ */}
+        <div style={{display:"flex",flexWrap:"wrap",justifyContent:"center",gap:8,padding:"8px 16px 16px"}}>
+          {data.sections.map((sec,si)=><button key={sec.id} onClick={()=>setActiveSec(si)} style={{padding:"7px 16px",background:activeSec===si?`linear-gradient(135deg,${T.accent},${T.accentBright})`:T.accentFaint,border:`1px solid ${activeSec===si?T.accent:T.borderLight}`,borderRadius:20,cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:"'Cinzel',Georgia,serif",color:activeSec===si?T.bg:T.accent,letterSpacing:0.5,transition:"all 0.2s",boxShadow:activeSec===si?`0 2px 12px ${T.accentFaint}`:"none"}}>{sec.title}</button>)}
+          <button onClick={()=>setActiveSec(data.sections.length)} style={{padding:"7px 16px",background:activeSec===data.sections.length?`linear-gradient(135deg,${T.accent},${T.accentBright})`:T.accentFaint,border:`1px solid ${activeSec===data.sections.length?T.accent:T.borderLight}`,borderRadius:20,cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:"'Cinzel',Georgia,serif",color:activeSec===data.sections.length?T.bg:T.accent,letterSpacing:0.5,transition:"all 0.2s",boxShadow:activeSec===data.sections.length?`0 2px 12px ${T.accentFaint}`:"none"}}>Journal</button>
+        </div>
+
+        {/* ══ SECTION PAGES ══ */}
+        {data.sections.map((sec,si)=>{
+          if(activeSec!==si)return null;
+          if(verifyOnly&&!sec.fields.some(f=>f.confidence==="low"))return<div key={sec.id} style={{padding:40,textAlign:"center",color:T.textMuted,fontStyle:"italic",animation:"pageFadeIn 0.3s ease"}}>No fields to verify in this section.</div>;
+          const sty=getSectionStyle(sec);
+          return<div key={sec.id} style={{padding:"24px 18px 40px",animation:"pageFadeIn 0.3s ease",borderLeft:`2px solid ${T.accentFaint}`,marginLeft:8}}>
+            <div style={{textAlign:"center",marginBottom:20}}>
+              {editing?<input value={sec.title} onChange={e=>updateSectionTitle(si,e.target.value)} style={{fontSize:20,fontWeight:700,color:T.accent,fontFamily:"'Cinzel',Georgia,serif",background:T.accentFaint,border:`1px solid ${T.borderLight}`,borderRadius:6,padding:"4px 12px",outline:"none",textAlign:"center",width:"80%"}}/>
+              :<h2 style={{fontSize:20,fontWeight:700,color:T.accent,fontFamily:"'Cinzel',Georgia,serif",letterSpacing:1}}>{sec.title}</h2>}
+              <div style={{display:"flex",alignItems:"center",gap:10,width:"40%",margin:"10px auto 0"}}><div style={{flex:1,height:1,background:T.sectionRule}}/><span style={{color:T.accent,fontSize:10,opacity:0.4}}>{T.ornChar}</span><div style={{flex:1,height:1,background:T.sectionRule}}/></div>
+              <div style={{fontSize:12,color:T.textMuted,marginTop:6}}>{sec.fields.length} fields</div>
+              {editing&&<div style={{display:"flex",gap:8,justifyContent:"center",marginTop:8}}>
+                <button onClick={()=>moveSection(si,-1)} disabled={si===0} style={{background:"none",border:`1px solid ${T.borderLight}`,borderRadius:6,padding:"3px 10px",cursor:si===0?"default":"pointer",opacity:si===0?0.3:1,fontSize:12,color:T.textSoft}}>▲ Up</button>
+                <button onClick={()=>moveSection(si,1)} disabled={si===data.sections.length-1} style={{background:"none",border:`1px solid ${T.borderLight}`,borderRadius:6,padding:"3px 10px",cursor:si===data.sections.length-1?"default":"pointer",opacity:si===data.sections.length-1?0.3:1,fontSize:12,color:T.textSoft}}>▼ Down</button>
+                <button onClick={()=>removeSection(si)} style={{background:"none",border:"1px solid rgba(196,90,90,0.3)",borderRadius:6,padding:"3px 10px",cursor:"pointer",fontSize:12,color:"rgba(196,90,90,0.7)"}}>✕ Remove</button>
+              </div>}
+            </div>
+            {sty==="grid"&&<div style={{display:"flex",flexWrap:"wrap",gap:10}}>{sec.fields.map((f,fi)=><div key={f.id} style={{flex:"1 1 28%",minWidth:80,background:`linear-gradient(160deg,${T.accentFaint},transparent)`,border:`1.5px solid ${T.borderLight}`,borderTop:`3px solid ${T.accent}`,borderRadius:12,padding:"14px 8px 12px",textAlign:"center",position:"relative",display:"flex",flexDirection:"column",gap:4,boxShadow:`inset 0 1px 8px ${T.accentFaint}, 0 2px 8px ${T.accentFaint}`}}>{editing&&<button onClick={()=>removeField(si,fi)} style={{position:"absolute",top:2,right:4,background:"none",border:"none",cursor:"pointer",fontSize:11,color:T.textMuted}}>✕</button>}<EditableLabel value={f.label} onChange={v=>updateField(si,fi,"label",v)} T={T}/><EditableValue value={f.value} onChange={v=>updateField(si,fi,"value",v)} T={T} style={{fontSize:30,fontWeight:700,fontFamily:"'Cinzel',Georgia,serif",display:"block",textAlign:"center",borderBottom:"none",color:T.accent,textShadow:`0 0 12px ${T.accentFaint}`}}/><Dot c={f.confidence} T={T} s={{margin:"2px auto 0"}}/></div>)}</div>}
+            {sty==="skills"&&<div style={{display:"flex",flexDirection:"column",gap:2}}>{sec.fields.map((f,fi)=>{const pct=parseInt(f.value);const isPct=!isNaN(pct)&&f.value.includes("%");return<div key={f.id} style={{padding:"7px 0"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:3}}><span style={{display:"flex",alignItems:"center",gap:5,flex:1}}>{editing&&<MoveButtons T={T} si={si} fi={fi} total={sec.fields.length} moveField={moveField}/>}<Dot c={f.confidence} T={T}/><EditableLabel value={f.label} onChange={v=>updateField(si,fi,"label",v)} T={T}/></span><div style={{display:"flex",alignItems:"center",gap:4}}><EditableValue value={f.value} onChange={v=>updateField(si,fi,"value",v)} T={T} style={{fontSize:14,fontWeight:600,color:T.accent,textAlign:"right",maxWidth:60}}/>{editing&&<button onClick={()=>removeField(si,fi)} style={{background:"none",border:"none",cursor:"pointer",fontSize:12,color:T.textMuted}}>✕</button>}</div></div>{isPct&&<div style={{height:4,background:T.accentFaint,borderRadius:2,overflow:"hidden"}}><div style={{height:"100%",width:`${Math.min(pct,100)}%`,background:`linear-gradient(90deg,${T.accentDim},${T.accent})`,borderRadius:2,boxShadow:`0 0 8px ${T.accentFaint}`}}/></div>}</div>})}</div>}
+            {sty==="spells"&&<div>{[...new Set(sec.fields.map(f=>f.label))].map(group=><div key={group} style={{marginBottom:16}}><div style={{fontSize:13,color:T.textSoft,letterSpacing:1.5,fontFamily:"'Cinzel',Georgia,serif",marginBottom:10,textTransform:"uppercase"}}>{group}s</div><div style={{display:"flex",flexWrap:"wrap",gap:8}}>{sec.fields.map((f,fi)=>{if(f.label!==group)return null;return<span key={f.id} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"8px 16px",background:`linear-gradient(135deg,${T.accentFaint},transparent)`,border:`1px solid ${T.borderLight}`,borderLeft:`3px solid ${T.accent}`,borderRadius:20,boxShadow:`0 0 12px ${T.accentFaint}, inset 0 0 12px ${T.accentFaint}`}}><Dot c={f.confidence} T={T} s={{width:6,height:6}}/><EditableValue value={f.value} onChange={v=>updateField(si,fi,"value",v)} T={T} style={{fontSize:15,borderBottom:"none",padding:0}}/>{editing&&<button onClick={()=>removeField(si,fi)} style={{background:"none",border:"none",cursor:"pointer",fontSize:11,color:T.textMuted,marginLeft:2}}>✕</button>}</span>})}</div></div>)}</div>}
+            {sty==="default"&&<div style={{display:"flex",flexDirection:"column",gap:0}}>{sec.fields.map((f,fi)=><div key={f.id} style={{display:"flex",alignItems:"flex-start",gap:8,padding:"10px 0",borderBottom:`1px solid ${T.accentFaint}`}}>{editing&&<MoveButtons T={T} si={si} fi={fi} total={sec.fields.length} moveField={moveField}/>}<Dot c={f.confidence} T={T} s={{marginTop:8}}/><div style={{flex:1,display:"flex",flexDirection:"column",gap:2}}><EditableLabel value={f.label} onChange={v=>updateField(si,fi,"label",v)} T={T}/><EditableValue value={f.value} onChange={v=>updateField(si,fi,"value",v)} T={T}/></div>{editing&&<button onClick={()=>removeField(si,fi)} style={{background:"none",border:"none",cursor:"pointer",fontSize:13,color:T.textMuted,padding:"4px",flexShrink:0}}>✕</button>}</div>)}</div>}
+            {editing&&<button onClick={()=>addField(si)} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,padding:"10px",background:"none",border:`1px dashed ${T.borderLight}`,borderRadius:8,cursor:"pointer",width:"100%",marginTop:12}}><span style={{fontSize:14,color:T.accentDim}}>+ Add Field</span></button>}
+          </div>;
+        })}
+
+        {/* ══ JOURNAL PAGE ══ */}
+        {activeSec===data.sections.length&&<div style={{padding:"24px 18px 40px",display:"flex",flexDirection:"column",gap:16,animation:"pageFadeIn 0.3s ease"}}>
+          <div style={{textAlign:"center"}}><h2 style={{fontSize:20,fontWeight:700,color:T.accent,fontFamily:"'Cinzel',Georgia,serif",letterSpacing:1}}>Journal</h2><div style={{display:"flex",alignItems:"center",gap:10,width:"40%",margin:"10px auto 0"}}><div style={{flex:1,height:1,background:T.sectionRule}}/><span style={{color:T.accent,fontSize:10,opacity:0.4}}>{T.ornChar}</span><div style={{flex:1,height:1,background:T.sectionRule}}/></div></div>
+          <div style={{display:"flex",flexDirection:"column",gap:10}}>
+            <div style={{display:"flex",gap:8}}><input ref={noteRef} value={noteInput} onChange={e=>setNoteInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")addNote()}} placeholder="Add a session note..." style={{flex:1,fontSize:15,color:T.text,background:T.accentFaint,border:`1px solid ${T.borderLight}`,borderRadius:8,padding:"10px 12px",outline:"none",fontFamily:"'EB Garamond',Georgia,serif"}}/><button onClick={addNote} style={{padding:"10px 16px",background:`linear-gradient(135deg,${T.accent},${T.accentBright})`,border:"none",borderRadius:8,cursor:"pointer",fontSize:14,fontWeight:700,color:T.bg,fontFamily:"'Cinzel',Georgia,serif",flexShrink:0}}>+</button></div>
+            {(data.sessionNotes||[]).length===0&&<p style={{fontSize:14,color:T.textMuted,fontStyle:"italic",margin:0,textAlign:"center",padding:"16px 0"}}>No entries yet. Add your first after a session.</p>}
+            {[...(data.sessionNotes||[])].reverse().map(note=><div key={note.id} style={{padding:"12px 14px",background:T.accentFaint,borderRadius:10,border:`1px solid ${T.border}`}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}><div style={{flex:1}}><div style={{fontSize:12,color:T.textSoft,marginBottom:4,fontFamily:"'Cinzel',Georgia,serif",letterSpacing:0.5}}>{new Date(note.timestamp).toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric",year:"numeric"})} · {new Date(note.timestamp).toLocaleTimeString(undefined,{hour:"numeric",minute:"2-digit"})}</div><div style={{fontSize:15,color:T.text,lineHeight:1.5}}>{note.text}</div></div><button onClick={()=>removeNote(note.id)} style={{background:"none",border:"none",cursor:"pointer",fontSize:13,color:T.textMuted,padding:"2px",flexShrink:0}}>✕</button></div></div>)}
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:10,width:"30%",margin:"8px auto"}}><div style={{flex:1,height:1,background:T.sectionRule}}/><span style={{color:T.accent,fontSize:10,opacity:0.3}}>{T.ornChar}</span><div style={{flex:1,height:1,background:T.sectionRule}}/></div>
+          <button onClick={()=>{const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download=`${(data.name||"character").replace(/[^a-z0-9]/gi,"_")}.json`;a.click();URL.revokeObjectURL(url)}} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"14px",background:"none",border:`1px solid ${T.borderLight}`,borderRadius:12,cursor:"pointer",width:"100%"}}><span style={{fontSize:15,color:T.textSoft}}>⬇ Export Character</span></button>
+          {isFallen?<div style={{padding:"14px 16px",background:"rgba(255,255,255,0.03)",border:`1px solid ${T.border}`,borderRadius:12,textAlign:"center"}}><span style={{fontSize:14,color:T.textMuted,fontStyle:"italic"}}>⚔ This character rests in the Fallen Heroes archive</span></div>
+          :onArchive&&<button onClick={()=>{onSave(data);onArchive()}} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"14px",background:"none",border:"1px solid rgba(196,90,90,0.2)",borderRadius:12,cursor:"pointer",width:"100%"}}><span style={{fontSize:15,color:"rgba(196,90,90,0.7)"}}>⚔ Archive to Fallen Heroes</span></button>}
+          {editing&&<button onClick={addSection} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"14px",background:"none",border:`1px dashed ${T.borderLight}`,borderRadius:12,cursor:"pointer",width:"100%"}}><span style={{fontSize:16,color:T.accentDim}}>+ Add Section</span></button>}
+          <Footer T={T}/>
+        </div>}
+
+      </div>
+    </div>
+  </div>;
+}
+
+/* ━━━━ MAIN APP ━━━━ */
+function SheetSnap(){
+  const[view,setView]=useState("loading");
+  const[themeKey,setThemeKey]=useState("parchment");
+  const[characters,setCharacters]=useState([]);
+  const[fallenHeroes,setFallenHeroes]=useState([]);
+  const[activeCharIdx,setActiveCharIdx]=useState(null);
+  const[activeIsFallen,setActiveIsFallen]=useState(false);
+  const[captureImages,setCaptureImages]=useState([]);
+  const T=THEMES[themeKey];
+
+  const DEMO_CHAR={name:"Thalindra Ashveil",name_confidence:"high",system:"Dungeons & Dragons 5e",system_confidence:"high",themeKey:"parchment",sections:[
+    {id:"abilities",title:"Ability Scores",fields:[{id:"str",label:"STR",value:"16",confidence:"high"},{id:"dex",label:"DEX",value:"12",confidence:"high"},{id:"con",label:"CON",value:"14",confidence:"high"},{id:"int",label:"INT",value:"10",confidence:"high"},{id:"wis",label:"WIS",value:"13",confidence:"low"},{id:"cha",label:"CHA",value:"18",confidence:"high"}]},
+    {id:"identity",title:"Character Info",fields:[{id:"race",label:"Race",value:"Half-Elf",confidence:"high"},{id:"class",label:"Class",value:"Warlock",confidence:"high"},{id:"level",label:"Level",value:"7",confidence:"high"},{id:"alignment",label:"Alignment",value:"Chaotic Neutral",confidence:"high"},{id:"hit_points",label:"Hit Points",value:"52",confidence:"high"},{id:"ac",label:"Armor Class",value:"15",confidence:"high"}]},
+    {id:"skills",title:"Skills",fields:[{id:"arcana",label:"Arcana",value:"45%",confidence:"high"},{id:"deception",label:"Deception",value:"70%",confidence:"high"},{id:"intimidation",label:"Intimidation",value:"55%",confidence:"high"},{id:"persuasion",label:"Persuasion",value:"65%",confidence:"low"}]},
+    {id:"spells",title:"Spells Known",fields:[{id:"s1",label:"Cantrip",value:"Eldritch Blast",confidence:"high"},{id:"s2",label:"Cantrip",value:"Minor Illusion",confidence:"high"},{id:"s3",label:"Spell",value:"Hex",confidence:"high"},{id:"s4",label:"Spell",value:"Armor of Agathys",confidence:"high"},{id:"s5",label:"Spell",value:"Misty Step",confidence:"high"},{id:"s6",label:"Spell",value:"Counterspell",confidence:"low"},{id:"s7",label:"Spell",value:"Hunger of Hadar",confidence:"high"}]},
+    {id:"equipment",title:"Equipment",fields:[{id:"e1",label:"Weapon",value:"Pact Blade (Rapier)",confidence:"high"},{id:"e2",label:"Armor",value:"Studded Leather",confidence:"high"},{id:"e3",label:"Focus",value:"Crystal Orb",confidence:"high"},{id:"e4",label:"Item",value:"Potion of Healing ×3",confidence:"high"},{id:"e5",label:"Item",value:"Component Pouch",confidence:"low"}]},
+    {id:"features",title:"Features & Traits",fields:[{id:"f1",label:"Patron",value:"The Archfey",confidence:"high"},{id:"f2",label:"Pact Boon",value:"Pact of the Blade",confidence:"high"},{id:"f3",label:"Invocation",value:"Thirsting Blade",confidence:"high"},{id:"f4",label:"Invocation",value:"Agonizing Blast",confidence:"high"},{id:"f5",label:"Racial",value:"Fey Ancestry",confidence:"high"},{id:"f6",label:"Racial",value:"Darkvision 60ft",confidence:"high"}]}
+  ],sessionNotes:[{id:"n1",text:"Struck a bargain with the Thornwood Court. The Archfey is pleased... for now.",timestamp:"2026-04-08T21:30:00Z"},{id:"n2",text:"Party entered the Shattered Spire. Found the seal but it's warded — need to research.",timestamp:"2026-04-05T20:15:00Z"}]};
+
+  useEffect(()=>{
+    const c=store.get("ss-chars");if(c&&c.length)setCharacters(c); else setCharacters([DEMO_CHAR]);
+    const f=store.get("ss-fallen");if(f)setFallenHeroes(f);
+    const t=store.get("ss-theme");if(t)setThemeKey(t);
+    store.set("ss-auth",true);
+    const nav=store.get("ss-nav");
+    if(nav&&nav.view==="character"&&nav.idx!=null){
+      const list=nav.fallen?f:(c&&c.length?c:[DEMO_CHAR]);
+      if(list&&nav.idx<list.length){setActiveCharIdx(nav.idx);setActiveIsFallen(!!nav.fallen);setView("character");return}
+    }
+    setView("home");
+  },[]);
+  useEffect(()=>{if(view!=="loading")store.set("ss-chars",characters)},[characters]);
+  useEffect(()=>{if(view!=="loading")store.set("ss-fallen",fallenHeroes)},[fallenHeroes]);
+  useEffect(()=>{if(view!=="loading")store.set("ss-theme",themeKey)},[themeKey]);
+  useEffect(()=>{if(view!=="loading")store.set("ss-nav",{view,idx:activeCharIdx,fallen:activeIsFallen})},[view,activeCharIdx,activeIsFallen]);
+
+  const handleSignIn=()=>{store.set("ss-auth",true);setView("home")};
+  const handleStartCapture=()=>setView("capture");
+  const handleBack=()=>{setView("home")};
+  const handleScan=images=>{setCaptureImages(images);setView("processing")};
+  const handleExtracted=charData=>{const nc=[...characters,charData];setCharacters(nc);setActiveCharIdx(nc.length-1);setActiveIsFallen(false);setView("character")};
+  const handleOpenChar=idx=>{setActiveCharIdx(idx);setActiveIsFallen(false);setView("character")};
+  const handleOpenFallen=idx=>{setActiveCharIdx(idx);setActiveIsFallen(true);setView("character")};
+  const handleSaveChar=d=>{if(activeIsFallen)setFallenHeroes(p=>p.map((c,i)=>i===activeCharIdx?d:c));else setCharacters(p=>p.map((c,i)=>i===activeCharIdx?d:c))};
+  const handleDeleteChar=idx=>setCharacters(p=>p.filter((_,i)=>i!==idx));
+  const handleArchiveChar=idx=>{const c=characters[idx];setFallenHeroes(p=>[...p,{...c,archivedAt:new Date().toISOString()}]);setCharacters(p=>p.filter((_,i)=>i!==idx))};
+  const handleRestoreChar=idx=>{const{archivedAt,...c}=fallenHeroes[idx];setCharacters(p=>[...p,c]);setFallenHeroes(p=>p.filter((_,i)=>i!==idx))};
+  const handleDeleteFallen=idx=>setFallenHeroes(p=>p.filter((_,i)=>i!==idx));
+  const handleImport=charData=>{const nc=[...characters,charData];setCharacters(nc);setActiveCharIdx(nc.length-1);setActiveIsFallen(false);setView("character")};
+  const handleProcessError=()=>{setView("capture")};
+
+  if(view==="loading")return<div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"#f7ecd8"}}><Logo T={THEMES.parchment} size={32}/></div>;
+
+  return<div>
+    {store._full&&<div style={{padding:"10px 16px",background:"rgba(217,79,79,0.15)",borderBottom:"1px solid rgba(217,79,79,0.3)",textAlign:"center"}}><span style={{fontSize:14,color:"#F2A0A0",lineHeight:1.5}}>⚠ Storage is full. Export your characters to avoid losing data.</span></div>}
+    {view==="signin"&&<SignInScreen T={T} onSignIn={handleSignIn}/>}
+    {view==="home"&&<HomeScreen T={T} characters={characters} fallenHeroes={fallenHeroes} onStartCapture={handleStartCapture} onOpenChar={handleOpenChar} onOpenFallen={handleOpenFallen} onDeleteChar={handleDeleteChar} onArchiveChar={handleArchiveChar} onRestoreChar={handleRestoreChar} onDeleteFallen={handleDeleteFallen} onImport={handleImport}/>}
+    {view==="capture"&&<CaptureScreen T={T} onBack={handleBack} onScan={handleScan}/>}
+    {view==="processing"&&<ProcessingScreen T={T} images={captureImages} onComplete={handleExtracted} onError={handleProcessError}/>}
+    {view==="character"&&activeCharIdx!==null&&<CharacterScreen T={T} character={activeIsFallen?fallenHeroes[activeCharIdx]:characters[activeCharIdx]} isFallen={activeIsFallen} onBack={handleBack} onSave={handleSaveChar} onArchive={activeIsFallen?null:()=>{handleArchiveChar(activeCharIdx);setView("home")}} themeKey={themeKey} setThemeKey={setThemeKey}/>}
+  </div>;
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<SheetSnap/>);
+</script>
+</body>
+</html>
