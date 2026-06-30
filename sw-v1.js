@@ -1,4 +1,4 @@
-const CACHE='sheetsnap-shell-v12';
+const CACHE='sheetsnap-shell-v13';
 const FONT_CSS='https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=EB+Garamond:ital,wght@0,400;0,600;0,700;1,400&display=swap';
 self.addEventListener('install',function(e){
   self.skipWaiting();
@@ -16,6 +16,17 @@ self.addEventListener('activate',function(e){
 self.addEventListener('message',function(e){if(e.data&&e.data.type==='SKIP_WAITING')self.skipWaiting();});
 self.addEventListener('fetch',function(e){
   var req=e.request; if(req.method!=='GET')return;
+  // Network-first for page navigations so updates always land when online; cache is the offline fallback.
+  if(req.mode==='navigate'){
+    e.respondWith(fetch(req).then(function(res){
+      try{var copy=res.clone();caches.open(CACHE).then(function(c){c.put('./index.html',copy);});}catch(_){}
+      return res;
+    }).catch(function(){
+      return caches.match('./index.html').then(function(h){return h||caches.match('./');});
+    }));
+    return;
+  }
+  // Cache-first for other assets (fonts, etc.).
   e.respondWith(caches.match(req).then(function(hit){
     if(hit)return hit;
     return fetch(req).then(function(res){
@@ -25,8 +36,6 @@ self.addEventListener('fetch',function(e){
         }
       }catch(_){}
       return res;
-    }).catch(function(){
-      if(req.mode==='navigate')return caches.match('./index.html');
-    });
+    }).catch(function(){});
   }));
 });
