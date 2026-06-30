@@ -5887,5 +5887,39 @@ ReactDOM.createRoot(document.getElementById('root')).render(/*#__PURE__*/React.c
   }
 })();
 </script>
+<button id="ss-sync-btn" aria-label="Cloud sync" style="position:fixed;right:12px;bottom:calc(env(safe-area-inset-bottom,0px) + 12px);z-index:99999;min-height:40px;padding:.5rem .8rem;border:1px solid #D4A843;border-radius:20px;background:#0A0A0C;color:#D4A843;font:600 13px 'Josefin Sans',system-ui,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.4);cursor:pointer;">&#9729; Sign in to sync</button>
+<script>/*SheetSnap cloud sync — dedicated SheetSnap Firebase project (sheetsnap-fb659)*/
+(function(){
+ var FB="https://www.gstatic.com/firebasejs/10.12.2/";
+ var cfg={apiKey:"AIzaSyCCtPksJh9xPAOVWX7sFozRbQryNwDMbS4",authDomain:"sheetsnap-fb659.firebaseapp.com",projectId:"sheetsnap-fb659",storageBucket:"sheetsnap-fb659.firebasestorage.app",messagingSenderId:"400524646514",appId:"1:400524646514:web:a29e16540cd4d1e70b4aeb"};
+ var KEYS=["ss-chars","ss-fallen","ss-theme"];
+ var btn=document.getElementById("ss-sync-btn");
+ function setS(t){if(btn)btn.innerHTML=t;}
+ function gather(){var o={};KEYS.forEach(function(k){var v=localStorage.getItem(k);if(v!=null)o[k]=v;});return o;}
+ function apply(m){var ch=false;Object.keys(m||{}).forEach(function(k){if(KEYS.indexOf(k)>=0&&localStorage.getItem(k)!==m[k]){localStorage.setItem(k,m[k]);ch=true;}});return ch;}
+ Promise.all([import(FB+"firebase-app.js"),import(FB+"firebase-auth.js"),import(FB+"firebase-firestore.js")]).then(function(m){
+  var appM=m[0],authM=m[1],fsM=m[2];
+  var app=appM.initializeApp(cfg),auth=authM.getAuth(app),db=fsM.getFirestore(app);
+  var provider=new authM.GoogleAuthProvider();
+  var user=null,last="",timer=null;
+  function ref(uid){return fsM.doc(db,"users",uid);}
+  function push(){if(!user)return;var s=JSON.stringify(gather());if(s===last)return;last=s;fsM.setDoc(ref(user.uid),{sheetsnap_blob:s,sheetsnap_updatedAt:Date.now()},{merge:true}).catch(function(){});}
+  if(btn)btn.onclick=function(){if(user){authM.signOut(auth);}else{setS("&#9729; Opening Google sign-in&hellip;");authM.signInWithPopup(auth,provider).catch(function(){setS("&#9729; Sign-in didn't finish &mdash; tap to retry");});}};
+  authM.onAuthStateChanged(auth,function(u){
+   user=u;
+   if(u){
+    setS("&#9729; "+(u.email||"Synced")+" &middot; Sign out");
+    fsM.getDoc(ref(u.uid)).then(function(snap){
+     var d=snap.exists()?snap.data():null;
+     if(d&&d.sheetsnap_blob){try{var c=JSON.parse(d.sheetsnap_blob);if(apply(c)&&!sessionStorage.getItem("ss-sync-reloaded")){sessionStorage.setItem("ss-sync-reloaded","1");location.reload();return;}}catch(e){}}
+     last=JSON.stringify(gather());push();
+    }).catch(function(e){setS("&#9729; Sync blocked &mdash; check Firebase rules");});
+   } else { setS("&#9729; Sign in to sync"); }
+  });
+  setInterval(function(){if(user){var s=JSON.stringify(gather());if(s!==last){if(timer)clearTimeout(timer);timer=setTimeout(push,1200);}}},2000);
+  window.addEventListener("pagehide",push);
+  document.addEventListener("visibilitychange",function(){if(document.visibilityState==="hidden")push();});
+ }).catch(function(){setS("&#9729; Sync unavailable offline");});
+})();</script>
 </body>
 </html>
