@@ -4211,6 +4211,10 @@ function CharacterScreen({
   const [verifyOnly, setVerifyOnly] = useState(false);
   const [activeSec, setActiveSec] = useState(0);
   const [activeCat, setActiveCat] = useState(null);
+  useEffect(() => {
+    if (swipeRef.current) swipeRef.current.scrollTop = 0;
+    try { window.scrollTo(0, 0); } catch (_) {}
+  }, [activeCat]);
   const [showVerify, setShowVerify] = useState(false);
   const verifyTotalRef = useRef(0);
   const group = buildGroups(data.sections, data.catOrder);
@@ -4434,9 +4438,14 @@ function CharacterScreen({
     setData(p => {
       snap(p);
       const n = JSON.parse(JSON.stringify(p));
-      const ni = si + dir;
-      if (ni < 0 || ni >= n.sections.length) return p;
-      [n.sections[si], n.sections[ni]] = [n.sections[ni], n.sections[si]];
+      const cat = categorize(n.sections[si]);
+      const sibs = [];
+      n.sections.forEach((s, i) => { if (categorize(s) === cat) sibs.push(i); });
+      const pos = sibs.indexOf(si);
+      const tpos = pos + dir;
+      if (pos < 0 || tpos < 0 || tpos >= sibs.length) return p;
+      const tj = sibs[tpos];
+      const tmp = n.sections[si]; n.sections[si] = n.sections[tj]; n.sections[tj] = tmp;
       return n;
     });
   };
@@ -5075,7 +5084,7 @@ function CharacterScreen({
     }), /*#__PURE__*/React.createElement(FieldMenu, {
       T: T, k: "s" + si, menuKey: menuKey, setMenuKey: setMenuKey, onEdit: () => setEditKey("s" + si),
       onMoveUp: () => moveSection(si, -1), onMoveDown: () => moveSection(si, 1),
-      onDelete: () => delSection(si), canUp: si > 0, canDown: si < data.sections.length - 1
+      onDelete: () => delSection(si), canUp: group.catOf.some((c, i) => c === group.catOf[si] && i < si), canDown: group.catOf.some((c, i) => c === group.catOf[si] && i > si)
     })), /*#__PURE__*/React.createElement("div", {
       style: {
         display: "flex",
