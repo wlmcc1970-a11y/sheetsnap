@@ -3121,14 +3121,7 @@ function HubNav({
           color: T.textMuted,
           flex: "none"
         }
-      }, cnt), /*#__PURE__*/React.createElement("span", {
-        style: {
-          fontSize: 16,
-          color: T.accent,
-          opacity: 0.55,
-          flex: "none"
-        }
-      }, "›")), cat.key !== "journal" && /*#__PURE__*/React.createElement(FieldMenu, {
+      }, cnt)), cat.key !== "journal" && /*#__PURE__*/React.createElement(FieldMenu, {
         T: T, k: "cat_" + cat.key, menuKey: menuKey, setMenuKey: setMenuKey,
         onEdit: () => onRenameCategory(cat),
         onMoveUp: () => onMoveCategory(cat, -1), onMoveDown: () => onMoveCategory(cat, 1),
