@@ -5865,24 +5865,24 @@ ReactDOM.createRoot(document.getElementById('root')).render(/*#__PURE__*/React.c
     t.textContent=msg;t.classList.add('show');
     t.onclick=function(){t.classList.remove('show');if(onTap)onTap();};
     setTimeout(function(){t.classList.remove('show');},8000);}
+  var ssRefreshing=false;
+  function ssReload(){if(ssRefreshing)return;ssRefreshing=true;window.location.reload();}
+  function ssActivate(worker){if(!worker){ssReload();return;}try{worker.addEventListener('statechange',function(){if(worker.state==='activated')ssReload();});}catch(_){}try{worker.postMessage({type:'SKIP_WAITING'});}catch(_){}setTimeout(ssReload,3000);}
   if('serviceWorker' in navigator){
     window.addEventListener('load',function(){
       navigator.serviceWorker.register('sw-v1.js').then(function(reg){
-        if(reg.waiting&&navigator.serviceWorker.controller){showUpdate(function(){reg.waiting.postMessage({type:'SKIP_WAITING'});});}
+        if(reg.waiting&&navigator.serviceWorker.controller){showUpdate(function(){ssActivate(reg.waiting);});}
         reg.addEventListener('updatefound',function(){
           var nw=reg.installing; if(!nw)return;
           nw.addEventListener('statechange',function(){
             if(nw.state==='installed'&&navigator.serviceWorker.controller){
-              showUpdate(function(){nw.postMessage({type:'SKIP_WAITING'});});
+              showUpdate(function(){ssActivate(nw);});
             }
           });
         });
-        document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible'&&navigator.serviceWorker.controller){reg.update().then(function(){if(reg.waiting){showUpdate(function(){reg.waiting.postMessage({type:'SKIP_WAITING'});});}}).catch(function(){});}});
+        document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible'&&navigator.serviceWorker.controller){reg.update().then(function(){if(reg.waiting){showUpdate(function(){ssActivate(reg.waiting);});}}).catch(function(){});}});
       }).catch(function(err){console.error('SheetSnap SW registration failed',err);});
-      var refreshing=false;
-      navigator.serviceWorker.addEventListener('controllerchange',function(){
-        if(refreshing)return; refreshing=true; window.location.reload();
-      });
+      navigator.serviceWorker.addEventListener('controllerchange',ssReload);
     });
   }
 })();
