@@ -1102,6 +1102,35 @@ function EditableValue({
     setEd(false);
     if (onClose) onClose();
   };
+  const str = String(value == null ? "" : value);
+  const longText = str.length > 90 || str.indexOf("\n") >= 0;
+  if (ed && longText) return /*#__PURE__*/React.createElement("textarea", {
+    ref: r,
+    value: d,
+    onChange: e => setD(e.target.value),
+    onInput: e => { e.target.style.height = "auto"; e.target.style.height = e.target.scrollHeight + "px"; },
+    onBlur: commit,
+    translate: noTranslate ? "no" : undefined,
+    style: {
+      colorScheme: kbScheme(T),
+      fontSize: 17,
+      lineHeight: 1.7,
+      fontWeight: 500,
+      color: T.text,
+      background: T.accentFaint,
+      border: `1px solid ${T.borderLight}`,
+      borderRadius: 8,
+      padding: "10px 12px",
+      outline: "none",
+      width: "100%",
+      boxSizing: "border-box",
+      fontFamily: "'EB Garamond',Georgia,serif",
+      whiteSpace: "pre-wrap",
+      resize: "vertical",
+      minHeight: 96,
+      display: "block"
+    }
+  });
   if (ed) return /*#__PURE__*/React.createElement("input", {
     ref: r,
     value: d,
@@ -1128,21 +1157,31 @@ function EditableValue({
       ...sx
     }
   });
+  const dispStyle = {
+    cursor: field ? "default" : "pointer",
+    padding: "2px 0",
+    minHeight: 22,
+    display: "inline-block",
+    fontSize: 18,
+    fontWeight: 600,
+    color: value ? T.text : T.textMuted,
+    fontStyle: value ? "normal" : "italic",
+    borderBottom: field ? "none" : `1px dashed ${T.borderLight}`,
+    ...sx
+  };
+  if (longText) {
+    dispStyle.display = "block";
+    dispStyle.whiteSpace = "pre-wrap";
+    dispStyle.lineHeight = 1.75;
+    dispStyle.fontSize = 17;
+    dispStyle.fontWeight = 500;
+    dispStyle.wordBreak = "break-word";
+    dispStyle.textAlign = "left";
+  }
   return /*#__PURE__*/React.createElement("span", {
     onClick: field ? undefined : () => setEd(true),
     translate: noTranslate ? "no" : undefined,
-    style: {
-      cursor: field ? "default" : "pointer",
-      padding: "2px 0",
-      minHeight: 22,
-      display: "inline-block",
-      fontSize: 18,
-      fontWeight: 600,
-      color: value ? T.text : T.textMuted,
-      fontStyle: value ? "normal" : "italic",
-      borderBottom: field ? "none" : `1px dashed ${T.borderLight}`,
-      ...sx
-    }
+    style: dispStyle
   }, value || placeholder || (field ? "—" : "Tap to edit"));
 }
 function EditableLabel({
@@ -3750,6 +3789,7 @@ function FieldMenu({
     onMoveToSection();
     setMenuKey(null);
   }), item(true, "✕", deleteLabel || "Delete", () => {
+    setMenuKey(null);
     onDelete();
   }, true)));
 }
