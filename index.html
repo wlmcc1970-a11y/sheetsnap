@@ -3810,8 +3810,9 @@ function MoveModal({
       i: i
     });
   });
+  const t0 = useRef(Date.now());
   return /*#__PURE__*/React.createElement("div", {
-    onClick: onClose,
+    onClick: () => { if (Date.now() - t0.current > 350) onClose(); },
     style: {
       position: "fixed",
       top: 0,
@@ -3899,8 +3900,9 @@ function ConfirmDialog({
   onConfirm,
   onClose
 }) {
+  const t0 = useRef(Date.now());
   return /*#__PURE__*/React.createElement("div", {
-    onClick: onClose,
+    onClick: () => { if (Date.now() - t0.current > 350) onClose(); },
     style: {
       position: "fixed",
       top: 0,
@@ -3997,8 +3999,9 @@ function RenameModal({
     onSave(v);
     onClose();
   };
+  const t0 = useRef(Date.now());
   return /*#__PURE__*/React.createElement("div", {
-    onClick: onClose,
+    onClick: () => { if (Date.now() - t0.current > 350) onClose(); },
     style: {
       position: "fixed",
       top: 0,
@@ -5906,7 +5909,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(/*#__PURE__*/React.c
     t.onclick=function(){t.classList.remove('show');if(onTap)onTap();};
     setTimeout(function(){t.classList.remove('show');},8000);}
   var ssRefreshing=false;
-  function ssReload(){if(ssRefreshing)return;ssRefreshing=true;window.location.reload();}
+  function ssReload(){if(ssRefreshing)return;var ae=document.activeElement;if(ae&&(ae.tagName==="INPUT"||ae.tagName==="TEXTAREA")){setTimeout(ssReload,5000);return;}ssRefreshing=true;window.location.reload();}
   function ssActivate(worker){if(!worker){ssReload();return;}try{worker.addEventListener('statechange',function(){if(worker.state==='activated')ssReload();});}catch(_){}try{worker.postMessage({type:'SKIP_WAITING'});}catch(_){}setTimeout(ssReload,3000);}
   if('serviceWorker' in navigator){
     window.addEventListener('load',function(){

@@ -1,6 +1,7 @@
-const CACHE='sheetsnap-shell-v9';
+const CACHE='sheetsnap-shell-v10';
 const FONT_CSS='https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=EB+Garamond:ital,wght@0,400;0,600;0,700;1,400&display=swap';
 self.addEventListener('install',function(e){
+  self.skipWaiting();
   e.waitUntil((async function(){
     const c=await caches.open(CACHE);
     try{await c.addAll([new Request('./',{cache:'reload'}),new Request('./index.html',{cache:'reload'})]);}catch(_){}
