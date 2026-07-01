@@ -4622,6 +4622,17 @@ function CharacterScreen({
     setRenameCat({ cat: cat, current: (data.catLabels && data.catLabels[cat.key]) || (CAT_META[cat.key] || {}).label || cat.label || "" });
   };
   const undoToast = () => { buzz(25); undo(); setToast(null); };
+  const exportSheet = () => {
+    const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+    const secs = (data.sections || []).map(sec => {
+      const rows = (sec.fields || []).map(f => `<div class="f"><div class="fl">${esc(f.label)}</div><div class="fv">${esc(f.value) || "&mdash;"}</div></div>`).join("");
+      return `<section class="sec"><h2>${esc(sec.title)}</h2>${rows}</section>`;
+    }).join("");
+    const av = data.avatarImg ? `<img class="pf" src="${data.avatarImg}">` : "";
+    const html = `<!doctype html><html><head><meta charset="utf8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(data.name || "Character")}</title><style>*{box-sizing:border-box;margin:0;font-family:Georgia,'Times New Roman',serif}body{background:#efe7d6;color:#2a2418;padding:22px}.sheet{max-width:820px;margin:0 auto 70px;background:#fbf7ec;border:2px solid #C9A24B;border-radius:12px;padding:26px;box-shadow:0 6px 24px rgba(0,0,0,.15)}header{display:flex;gap:18px;align-items:center;border-bottom:2px solid #C9A24B;padding-bottom:16px;margin-bottom:18px}.pf{width:92px;height:92px;object-fit:cover;border-radius:10px;border:2px solid #C9A24B}h1{font-family:'Cinzel',Georgia,serif;font-size:30px;color:#7a5a12;letter-spacing:.5px}.sys{color:#8a7a52;font-style:italic;margin-top:2px}.grid{column-width:330px;column-gap:22px}.sec{break-inside:avoid;-webkit-column-break-inside:avoid;margin-bottom:16px;border:1px solid #d8cba6;border-radius:8px;padding:12px 14px;background:#fffdf7}.sec h2{font-family:'Cinzel',Georgia,serif;font-size:16px;color:#7a5a12;border-bottom:1px solid #e2d6b4;padding-bottom:6px;margin-bottom:8px;letter-spacing:.5px}.f{display:flex;justify-content:space-between;gap:12px;padding:3px 0;font-size:14px}.fl{color:#6b5f3f}.fv{font-weight:700;text-align:right;white-space:pre-wrap}footer{margin-top:18px;text-align:center;color:#a8996f;font-size:12px;font-style:italic}.bar{position:fixed;left:0;right:0;bottom:0;padding:12px;text-align:center;background:#2a1709}.bar button{padding:11px 24px;font:700 15px 'Cinzel',Georgia,serif;color:#0e0a06;background:#E0B84D;border:none;border-radius:10px;cursor:pointer}@media print{.bar{display:none}body{background:#fff;padding:0}.sheet{border:none;box-shadow:none;max-width:none;margin:0}}</style></head><body><div class="sheet"><header>${av}<div><h1>${esc(data.name || "Character")}</h1>${data.system ? `<div class="sys">${esc(data.system)}</div>` : ""}</div></header><div class="grid">${secs}</div><footer>Created with SheetSnap &middot; DigiRune Studios</footer></div><div class="bar"><button onclick="window.print()">Save as PDF / Print</button></div></body></html>`;
+    try { const w = window.open("", "_blank"); if (w && w.document) { w.document.open(); w.document.write(html); w.document.close(); showToast("Sheet opened — tap Save as PDF / Print"); return; } } catch (e) {}
+    const b = new Blob([html], { type: "text/html" }); const u = URL.createObjectURL(b); const a = document.createElement("a"); a.href = u; a.download = `${(data.name || "character").replace(/[^a-z0-9]/gi, "_")}_sheet.html`; a.click(); URL.revokeObjectURL(u);
+  };
   const doMoveField = ti => {
     if (!moveItem) return;
     const sec = data.sections[moveItem.si];
@@ -5676,7 +5687,19 @@ function CharacterScreen({
       height: 1,
       background: T.sectionRule
     }
-  })), /*#__PURE__*/React.createElement("button", {
+  })), /*#__PURE__*/React.createElement("div", {
+    style: { display: "flex", flexDirection: "column", gap: 10, width: "100%" }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: exportSheet,
+    className: "ss-press",
+    style: {
+      display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+      padding: "14px", background: T.accent, border: "none", borderRadius: 12,
+      cursor: "pointer", width: "100%"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: { fontSize: 15, fontWeight: 700, color: "#0e0a06", fontFamily: "'Cinzel',Georgia,serif", letterSpacing: ".5px" }
+  }, "⤓ Save as PDF / Print")), /*#__PURE__*/React.createElement("button", {
     onClick: () => {
       const blob = new Blob([JSON.stringify(data, null, 2)], {
         type: "application/json"
@@ -5693,7 +5716,7 @@ function CharacterScreen({
       alignItems: "center",
       justifyContent: "center",
       gap: 8,
-      padding: "14px",
+      padding: "12px",
       background: "none",
       border: `1px solid ${T.borderLight}`,
       borderRadius: 12,
@@ -5702,10 +5725,10 @@ function CharacterScreen({
     }
   }, /*#__PURE__*/React.createElement("span", {
     style: {
-      fontSize: 15,
-      color: T.textSoft
+      fontSize: 14,
+      color: T.textMuted
     }
-  }, "⬇ Export Character")), isFallen ? /*#__PURE__*/React.createElement("div", {
+  }, "⬇ Backup file (.json)"))), isFallen ? /*#__PURE__*/React.createElement("div", {
     style: {
       padding: "14px 16px",
       background: "rgba(255,255,255,0.03)",
@@ -5980,7 +6003,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(/*#__PURE__*/React.c
 })();
 </script>
 <button id="ss-sync-btn" aria-label="Cloud sync" style="position:fixed;right:12px;bottom:calc(env(safe-area-inset-bottom,0px) + 12px);z-index:99999;min-height:40px;padding:.5rem .8rem;border:1px solid #D4A843;border-radius:20px;background:#0A0A0C;color:#D4A843;font:600 13px 'Josefin Sans',system-ui,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.4);cursor:pointer;">&#9729; Sign in to sync</button>
-<div id="ss-build" style="position:fixed;left:8px;bottom:calc(env(safe-area-inset-bottom,0px) + 8px);z-index:99999;font:700 11px system-ui,sans-serif;color:#D4A843;opacity:.75;pointer-events:none;letter-spacing:.5px;">v17</div>
+<div id="ss-build" style="position:fixed;left:8px;bottom:calc(env(safe-area-inset-bottom,0px) + 8px);z-index:99999;font:700 11px system-ui,sans-serif;color:#D4A843;opacity:.75;pointer-events:none;letter-spacing:.5px;">v18</div>
 <script>/*SheetSnap cloud sync — dedicated SheetSnap Firebase project (sheetsnap-fb659)*/
 (function(){
  var FB="https://www.gstatic.com/firebasejs/10.12.2/";
