@@ -4294,6 +4294,7 @@ function CharacterScreen({
   const [verifyOnly, setVerifyOnly] = useState(false);
   const [activeSec, setActiveSec] = useState(0);
   const [activeCat, setActiveCat] = useState(null);
+  const [query, setQuery] = useState("");
   useEffect(() => {
     if (swipeRef.current) swipeRef.current.scrollTop = 0;
     try { window.scrollTo(0, 0); } catch (_) {}
@@ -4301,6 +4302,26 @@ function CharacterScreen({
   const [showVerify, setShowVerify] = useState(false);
   const verifyTotalRef = useRef(0);
   const group = buildGroups(data.sections, data.catOrder);
+  const _q = query.trim().toLowerCase();
+  const searchResults = !_q ? [] : (function () {
+    const out = [];
+    data.sections.forEach(function (sec, si) {
+      (sec.fields || []).forEach(function (f) {
+        if ((f.label && f.label.toLowerCase().indexOf(_q) >= 0) || (f.value != null && String(f.value).toLowerCase().indexOf(_q) >= 0)) {
+          out.push({ sectionTitle: sec.title, catKey: group.catOf[si], label: f.label, value: f.value });
+        }
+      });
+    });
+    return out.slice(0, 30);
+  })();
+  const hl = function (text) {
+    const s = String(text == null ? "" : text);
+    const ql = query.trim();
+    if (!ql) return s;
+    const i = s.toLowerCase().indexOf(ql.toLowerCase());
+    if (i < 0) return s;
+    return [s.slice(0, i), /*#__PURE__*/React.createElement("mark", { key: "m", style: { background: T.accent, color: "#0e0a06", borderRadius: 3, padding: "0 2px" } }, s.slice(i, i + ql.length)), s.slice(i + ql.length)];
+  };
   const navKeys = [...group.cats.map(c => c.key), "journal"];
   const catPushedRef = useRef(false);
   useEffect(() => {
@@ -5135,7 +5156,7 @@ function CharacterScreen({
     T: T,
     width: "60%",
     spacing: "4px auto 12px"
-  })), /*#__PURE__*/React.createElement(HubNav, {
+  })), activeCat === null && /*#__PURE__*/React.createElement("div", { style: { width: "100%", maxWidth: 360, margin: "6px auto 2px" } }, /*#__PURE__*/React.createElement("input", { value: query, onChange: function (e) { setQuery(e.target.value); }, placeholder: "Search this character…", style: { width: "100%", padding: "11px 14px", borderRadius: 12, border: `1px solid ${T.borderLight}`, background: T.surface, color: T.text, fontSize: 15, boxSizing: "border-box", fontFamily: "Georgia,serif" } }), query.trim() && /*#__PURE__*/React.createElement("div", { style: { marginTop: 8, display: "flex", flexDirection: "column", gap: 6 } }, searchResults.length === 0 ? /*#__PURE__*/React.createElement("div", { style: { padding: "10px", textAlign: "center", color: T.textMuted, fontSize: 14, fontStyle: "italic" } }, "No matches") : searchResults.map(function (r, idx) { return /*#__PURE__*/React.createElement("button", { key: idx, className: "ss-press", onClick: function () { setActiveCat(r.catKey); setQuery(""); }, style: { textAlign: "left", display: "block", width: "100%", padding: "10px 12px", background: T.surface, border: `1px solid ${T.accentFaint}`, borderRadius: 10, cursor: "pointer" } }, /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: T.accent, textTransform: "uppercase", letterSpacing: ".5px", marginBottom: 2 } }, r.sectionTitle), /*#__PURE__*/React.createElement("div", { style: { fontSize: 14, color: T.text } }, hl(r.label), r.value != null && r.value !== "" ? /*#__PURE__*/React.createElement("span", { style: { color: T.textMuted } }, ": ") : null, r.value != null && r.value !== "" ? hl(r.value) : null)); })), /*#__PURE__*/React.createElement(HubNav, {
     T: T,
     data: data,
     group: group,
@@ -5972,7 +5993,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(/*#__PURE__*/React.c
 })();
 </script>
 <button id="ss-sync-btn" aria-label="Cloud sync" style="position:fixed;right:12px;bottom:calc(env(safe-area-inset-bottom,0px) + 12px);z-index:99999;min-height:40px;padding:.5rem .8rem;border:1px solid #D4A843;border-radius:20px;background:#0A0A0C;color:#D4A843;font:600 13px 'Josefin Sans',system-ui,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.4);cursor:pointer;">&#9729; Sign in to sync</button>
-<div id="ss-build" style="position:fixed;left:8px;bottom:calc(env(safe-area-inset-bottom,0px) + 8px);z-index:99999;font:700 11px system-ui,sans-serif;color:#D4A843;opacity:.75;pointer-events:none;letter-spacing:.5px;">v19</div>
+<div id="ss-build" style="position:fixed;left:8px;bottom:calc(env(safe-area-inset-bottom,0px) + 8px);z-index:99999;font:700 11px system-ui,sans-serif;color:#D4A843;opacity:.75;pointer-events:none;letter-spacing:.5px;">v20</div>
 <script>/*SheetSnap cloud sync — dedicated SheetSnap Firebase project (sheetsnap-fb659)*/
 (function(){
  var FB="https://www.gstatic.com/firebasejs/10.12.2/";
