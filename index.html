@@ -5980,7 +5980,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(/*#__PURE__*/React.c
 })();
 </script>
 <button id="ss-sync-btn" aria-label="Cloud sync" style="position:fixed;right:12px;bottom:calc(env(safe-area-inset-bottom,0px) + 12px);z-index:99999;min-height:40px;padding:.5rem .8rem;border:1px solid #D4A843;border-radius:20px;background:#0A0A0C;color:#D4A843;font:600 13px 'Josefin Sans',system-ui,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.4);cursor:pointer;">&#9729; Sign in to sync</button>
-<div id="ss-build" style="position:fixed;left:8px;bottom:calc(env(safe-area-inset-bottom,0px) + 8px);z-index:99999;font:700 11px system-ui,sans-serif;color:#D4A843;opacity:.75;pointer-events:none;letter-spacing:.5px;">v16</div>
+<div id="ss-build" style="position:fixed;left:8px;bottom:calc(env(safe-area-inset-bottom,0px) + 8px);z-index:99999;font:700 11px system-ui,sans-serif;color:#D4A843;opacity:.75;pointer-events:none;letter-spacing:.5px;">v17</div>
 <script>/*SheetSnap cloud sync — dedicated SheetSnap Firebase project (sheetsnap-fb659)*/
 (function(){
  var FB="https://www.gstatic.com/firebasejs/10.12.2/";
@@ -5994,24 +5994,29 @@ ReactDOM.createRoot(document.getElementById('root')).render(/*#__PURE__*/React.c
   var appM=m[0],authM=m[1],fsM=m[2];
   var app=appM.initializeApp(cfg),auth=authM.getAuth(app),db=fsM.getFirestore(app);
   var provider=new authM.GoogleAuthProvider();
-  var user=null,last="",timer=null;
+  var user=null,last="",timer=null,syncing=false,lastSyncedAt=0;
+  function relTime(ts){if(!ts)return"just now";var s=Math.floor((Date.now()-ts)/1000);if(s<10)return"just now";if(s<60)return s+"s ago";var m=Math.floor(s/60);if(m<60)return m+"m ago";var h=Math.floor(m/60);if(h<24)return h+"h ago";return Math.floor(h/24)+"d ago";}
+  function render(){if(!btn)return;if(!user){setS("&#9729; Sign in to sync");return;}if(!navigator.onLine){setS("&#9888; Offline &middot; will sync");return;}if(syncing){setS("&#9729; Syncing&hellip;");return;}setS("&#10003; Synced &middot; "+relTime(lastSyncedAt));}
   function ref(uid){return fsM.doc(db,"users",uid);}
-  function push(){if(!user)return;var s=JSON.stringify(gather());if(s===last)return;last=s;fsM.setDoc(ref(user.uid),{sheetsnap_blob:s,sheetsnap_updatedAt:Date.now()},{merge:true}).catch(function(){});}
+  function push(){if(!user)return;var s=JSON.stringify(gather());if(s===last)return;last=s;syncing=true;render();fsM.setDoc(ref(user.uid),{sheetsnap_blob:s,sheetsnap_updatedAt:Date.now()},{merge:true}).then(function(){lastSyncedAt=Date.now();syncing=false;render();}).catch(function(){syncing=false;render();});}
   if(btn)btn.onclick=function(){if(user){authM.signOut(auth);}else{setS("&#9729; Opening Google sign-in&hellip;");authM.signInWithPopup(auth,provider).catch(function(){setS("&#9729; Sign-in didn't finish &mdash; tap to retry");});}};
   authM.onAuthStateChanged(auth,function(u){
    user=u;
    if(u){
-    setS("&#9729; "+(u.email||"Synced")+" &middot; Sign out");
+    syncing=true;render();
     fsM.getDoc(ref(u.uid)).then(function(snap){
      var d=snap.exists()?snap.data():null;
      if(d&&d.sheetsnap_blob){try{var c=JSON.parse(d.sheetsnap_blob);if(apply(c)&&!sessionStorage.getItem("ss-sync-reloaded")){sessionStorage.setItem("ss-sync-reloaded","1");location.reload();return;}}catch(e){}}
-     last=JSON.stringify(gather());push();
-    }).catch(function(e){setS("&#9729; Sync blocked &mdash; check Firebase rules");});
-   } else { setS("&#9729; Sign in to sync"); }
+     last=JSON.stringify(gather());lastSyncedAt=Date.now();syncing=false;render();push();
+    }).catch(function(e){syncing=false;if(!navigator.onLine){render();}else{setS("&#9888; Sync error &middot; tap to retry");}});
+   } else { syncing=false;render(); }
   });
   setInterval(function(){if(user){var s=JSON.stringify(gather());if(s!==last){if(timer)clearTimeout(timer);timer=setTimeout(push,1200);}}},2000);
   window.addEventListener("pagehide",push);
   document.addEventListener("visibilitychange",function(){if(document.visibilityState==="hidden")push();});
+  window.addEventListener("online",function(){if(user){render();push();}});
+  window.addEventListener("offline",render);
+  setInterval(function(){if(user&&!syncing&&navigator.onLine)render();},20000);
  }).catch(function(){setS("&#9729; Sync unavailable offline");});
 })();</script>
 </body>
