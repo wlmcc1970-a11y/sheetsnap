@@ -1,4 +1,4 @@
-const CACHE='sheetsnap-shell-v22';
+const CACHE='sheetsnap-shell-v23';
 const FONT_CSS='https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=EB+Garamond:ital,wght@0,400;0,600;0,700;1,400&display=swap';
 self.addEventListener('install',function(e){
   self.skipWaiting();

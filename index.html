@@ -4380,24 +4380,60 @@ function CharacterScreen({
   const verifyTotalRef = useRef(0);
   const group = buildGroups(data.sections, data.catOrder);
   const _q = query.trim().toLowerCase();
+  const _tokens = _q ? _q.split(/\s+/).filter(Boolean) : [];
+  const _strip = function (v) { return String(v == null ? "" : v).replace(/<[^>]*>/g, " ").toLowerCase(); };
   const searchResults = !_q ? [] : (function () {
-    const out = [];
-    data.sections.forEach(function (sec, si) {
-      (sec.fields || []).forEach(function (f) {
-        if ((f.label && f.label.toLowerCase().indexOf(_q) >= 0) || (f.value != null && String(f.value).toLowerCase().indexOf(_q) >= 0)) {
-          out.push({ sectionTitle: sec.title, catKey: group.catOf[si], label: f.label, value: f.value });
-        }
+    const matchAll = function (hay) { for (var i = 0; i < _tokens.length; i++) { if (hay.indexOf(_tokens[i]) < 0) return false; } return true; };
+    const matchAny = function (hay) { for (var i = 0; i < _tokens.length; i++) { if (hay.indexOf(_tokens[i]) >= 0) return true; } return false; };
+    const score = function (lab, val, sec) {
+      var L = _strip(lab), V = _strip(val), S = _strip(sec), s = 0, i;
+      if (L === _q) s += 120;
+      if (L.indexOf(_q) === 0) s += 60; else if (L.indexOf(_q) >= 0) s += 40;
+      if (V.indexOf(_q) >= 0) s += 25;
+      if (S.indexOf(_q) >= 0) s += 15;
+      for (i = 0; i < _tokens.length; i++) { var t = _tokens[i]; if (L.indexOf(t) >= 0) s += 12; if (V.indexOf(t) >= 0) s += 6; if (S.indexOf(t) >= 0) s += 3; }
+      return s;
+    };
+    const build = function (matcher) {
+      const out = [];
+      data.sections.forEach(function (sec, si) {
+        var st = _strip(sec.title);
+        (sec.fields || []).forEach(function (f) {
+          if (matcher(_strip(f.label) + " " + _strip(f.value) + " " + st)) {
+            out.push({ kind: "field", sectionTitle: sec.title, catKey: group.catOf[si], label: f.label, value: f.value, score: score(f.label, f.value, sec.title) });
+          }
+        });
       });
-    });
-    return out.slice(0, 30);
+      data.sections.forEach(function (sec, si) {
+        if (matcher(_strip(sec.title))) out.push({ kind: "section", sectionTitle: "Section", catKey: group.catOf[si], label: sec.title, value: "", score: score(sec.title, "", sec.title) + 35 });
+      });
+      if (matcher(_strip(data.name) + " " + _strip(data.system))) out.push({ kind: "profile", sectionTitle: "Character", catKey: null, label: data.name || "Character", value: data.system || "", score: 200 });
+      (data.sessionNotes || []).forEach(function (note) {
+        if (note && note.text && matcher(_strip(note.text))) { var txt = String(note.text); out.push({ kind: "note", sectionTitle: "Journal", catKey: "journal", label: "Session note", value: txt.length > 200 ? txt.slice(0, 200) + "…" : txt, score: score("", note.text, "Journal") + 8 }); }
+      });
+      return out;
+    };
+    var out = build(matchAll);
+    if (out.length === 0 && _tokens.length > 1) out = build(matchAny);
+    out.sort(function (a, b) { return b.score - a.score; });
+    return out.slice(0, 40);
   })();
   const hl = function (text) {
     const s = String(text == null ? "" : text);
-    const ql = query.trim();
-    if (!ql) return s;
-    const i = s.toLowerCase().indexOf(ql.toLowerCase());
-    if (i < 0) return s;
-    return [s.slice(0, i), /*#__PURE__*/React.createElement("mark", { key: "m", style: { background: T.accent, color: "#0e0a06", borderRadius: 3, padding: "0 2px" } }, s.slice(i, i + ql.length)), s.slice(i + ql.length)];
+    if (!_tokens.length) return s;
+    const esc = _tokens.map(function (t) { return t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }).filter(Boolean);
+    if (!esc.length) return s;
+    const re = new RegExp("(" + esc.join("|") + ")", "ig");
+    const nodes = [];
+    var last = 0, m, k = 0;
+    while ((m = re.exec(s)) !== null) {
+      if (m.index > last) nodes.push(s.slice(last, m.index));
+      nodes.push(/*#__PURE__*/React.createElement("mark", { key: "m" + (k++), style: { background: T.accent, color: "#0e0a06", borderRadius: 3, padding: "0 2px" } }, m[0]));
+      last = m.index + m[0].length;
+      if (re.lastIndex === m.index) re.lastIndex++;
+    }
+    if (last < s.length) nodes.push(s.slice(last));
+    return nodes;
   };
   const navKeys = [...group.cats.map(c => c.key), "journal"];
   const catPushedRef = useRef(false);
@@ -6076,7 +6112,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(/*#__PURE__*/React.c
 })();
 </script>
 <button id="ss-sync-btn" aria-label="Cloud sync" style="position:fixed;right:12px;bottom:calc(env(safe-area-inset-bottom,0px) + 12px);z-index:99999;min-height:40px;padding:.5rem .8rem;border:1px solid #D4A843;border-radius:20px;background:#0A0A0C;color:#D4A843;font:600 13px 'Josefin Sans',system-ui,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.4);cursor:pointer;">&#9729; Sign in to sync</button>
-<div id="ss-build" style="position:fixed;left:8px;bottom:calc(env(safe-area-inset-bottom,0px) + 8px);z-index:99999;font:700 11px system-ui,sans-serif;color:#D4A843;opacity:.75;pointer-events:none;letter-spacing:.5px;">v22</div>
+<div id="ss-build" style="position:fixed;left:8px;bottom:calc(env(safe-area-inset-bottom,0px) + 8px);z-index:99999;font:700 11px system-ui,sans-serif;color:#D4A843;opacity:.75;pointer-events:none;letter-spacing:.5px;">v23</div>
 <script>/*SheetSnap cloud sync — dedicated SheetSnap Firebase project (sheetsnap-fb659)*/
 (function(){
  var FB="https://www.gstatic.com/firebasejs/10.12.2/";
