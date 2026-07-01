@@ -1508,6 +1508,7 @@ function HomeScreen({
     }
   }, "How to Use ", /*#__PURE__*/React.createElement("span", { translate: "no" }, "SheetSnap")), /*#__PURE__*/React.createElement("button", {
     onClick: () => setShowHelp(false),
+    "aria-label": "Close help",
     style: {
       background: "none",
       border: "none",
@@ -1785,7 +1786,48 @@ function HomeScreen({
         gap: 3
       }
     }, /*#__PURE__*/React.createElement(CatIcon, { name: "trash", size: 18, color: T.textMuted }), /*#__PURE__*/React.createElement("span", { style: { fontSize: 9, letterSpacing: 0.3 } }, "Delete")));
-  })), /*#__PURE__*/React.createElement(Ornament, {
+  })), characters.length === 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      textAlign: "center",
+      gap: 8,
+      padding: "6px 6px 2px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    "aria-hidden": "true",
+    style: {
+      width: 62,
+      height: 62,
+      borderRadius: 18,
+      background: `linear-gradient(135deg,${T.accentFaint},transparent)`,
+      border: `1.5px solid ${T.borderLight}`,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      marginBottom: 2,
+      boxShadow: `0 0 20px ${T.accentFaint}`
+    }
+  }, /*#__PURE__*/React.createElement(CameraIcon, {
+    T: T
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 20,
+      fontWeight: 700,
+      color: T.nameColor || T.text,
+      fontFamily: "'Cinzel',Georgia,serif",
+      letterSpacing: 0.5
+    }
+  }, "Ready when you are"), /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: 15,
+      lineHeight: 1.55,
+      color: T.textSoft,
+      margin: 0,
+      maxWidth: 320
+    }
+  }, "No characters yet — snap your first sheet below and it'll appear right here, ready to play.")), /*#__PURE__*/React.createElement(Ornament, {
     T: T,
     width: "50%",
     spacing: "4px auto 12px"
@@ -2242,6 +2284,7 @@ function CaptureScreen({
     }
   }, "Pg ", i + 1), /*#__PURE__*/React.createElement("button", {
     onClick: () => setImages(p => p.filter((_, j) => j !== i)),
+    "aria-label": "Remove page",
     style: {
       background: "none",
       border: "none",
@@ -2479,14 +2522,32 @@ function ProcessingScreen({
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
-      fontSize: 17,
+      fontSize: 18,
+      fontWeight: 700,
       color: "#F2A0A0",
-      lineHeight: 1.5
+      lineHeight: 1.4,
+      marginBottom: 6
+    }
+  }, "Couldn't quite read that"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 15,
+      color: "#E8D9BE",
+      lineHeight: 1.55
+    }
+  }, "More light or a flatter, straight-on angle usually does the trick. Fill the frame with the sheet and hold steady — then give it another go."), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: "#9A8B76",
+      lineHeight: 1.4,
+      marginTop: 10,
+      opacity: 0.85
     }
   }, error)), /*#__PURE__*/React.createElement("button", {
     onClick: onError,
+    "aria-label": "Try scanning again",
     style: {
       padding: "14px 28px",
+      minHeight: 44,
       background: T.surface,
       border: `1px solid ${T.border}`,
       borderRadius: 12,
@@ -2495,7 +2556,7 @@ function ProcessingScreen({
       color: T.text,
       position: "relative"
     }
-  }, "Try Again"));
+  }, "↺ Try again"));
   return /*#__PURE__*/React.createElement("div", {
     style: {
       minHeight: "100vh",
@@ -3948,6 +4009,11 @@ function ConfirmDialog({
   onClose
 }) {
   const t0 = useRef(Date.now());
+  useEffect(() => {
+    const h = e => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, []);
   return /*#__PURE__*/React.createElement("div", {
     onClick: () => { if (Date.now() - t0.current > 350) onClose(); },
     style: {
@@ -3965,6 +4031,9 @@ function ConfirmDialog({
     }
   }, /*#__PURE__*/React.createElement("div", {
     onClick: e => e.stopPropagation(),
+    role: "dialog",
+    "aria-modal": "true",
+    "aria-label": title,
     style: {
       background: T.surface,
       border: T.frame || `2px solid ${T.borderLight}`,
@@ -4064,6 +4133,9 @@ function RenameModal({
     }
   }, /*#__PURE__*/React.createElement("div", {
     onClick: e => e.stopPropagation(),
+    role: "dialog",
+    "aria-modal": "true",
+    "aria-label": title || "Rename",
     style: {
       background: T.surface,
       border: T.frame || `2px solid ${T.borderLight}`,
@@ -4087,6 +4159,7 @@ function RenameModal({
     onChange: e => setV(e.target.value),
     onKeyDown: e => {
       if (e.key === "Enter") save();
+      if (e.key === "Escape") onClose();
     },
     style: {
       width: "100%",
@@ -4236,6 +4309,9 @@ function Toast({
 }) {
   if (!msg) return null;
   return /*#__PURE__*/React.createElement("div", {
+    role: "status",
+    "aria-live": "polite",
+    "aria-atomic": "true",
     style: {
       position: "fixed",
       left: 14,
@@ -4259,6 +4335,7 @@ function Toast({
     }
   }, msg), /*#__PURE__*/React.createElement("button", {
     onClick: onUndo,
+    "aria-label": "Undo delete",
     style: {
       background: "none",
       border: "none",
@@ -4730,6 +4807,7 @@ function CharacterScreen({
     }
   }, "How to Use"), /*#__PURE__*/React.createElement("button", {
     onClick: () => setShowHelp(false),
+    "aria-label": "Close help",
     style: {
       background: "none",
       border: "none",
@@ -5619,8 +5697,10 @@ function CharacterScreen({
     }
   }), /*#__PURE__*/React.createElement("button", {
     onClick: addNote,
+    "aria-label": "Add journal entry",
     style: {
       padding: "10px 16px",
+      minHeight: 44,
       background: T.metalGrad,
       border: "none",
       borderRadius: 8,
@@ -5683,13 +5763,16 @@ function CharacterScreen({
     }
   }, note.text)), /*#__PURE__*/React.createElement("button", {
     onClick: () => delNote(note.id),
+    "aria-label": "Delete journal entry",
     style: {
       background: "none",
       border: "none",
       cursor: "pointer",
       fontSize: 13,
       color: T.textMuted,
-      padding: "2px",
+      padding: "6px 8px",
+      minWidth: 44,
+      minHeight: 44,
       flexShrink: 0
     }
   }, "\u2715"))))), /*#__PURE__*/React.createElement("div", {
@@ -5993,7 +6076,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(/*#__PURE__*/React.c
 })();
 </script>
 <button id="ss-sync-btn" aria-label="Cloud sync" style="position:fixed;right:12px;bottom:calc(env(safe-area-inset-bottom,0px) + 12px);z-index:99999;min-height:40px;padding:.5rem .8rem;border:1px solid #D4A843;border-radius:20px;background:#0A0A0C;color:#D4A843;font:600 13px 'Josefin Sans',system-ui,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.4);cursor:pointer;">&#9729; Sign in to sync</button>
-<div id="ss-build" style="position:fixed;left:8px;bottom:calc(env(safe-area-inset-bottom,0px) + 8px);z-index:99999;font:700 11px system-ui,sans-serif;color:#D4A843;opacity:.75;pointer-events:none;letter-spacing:.5px;">v21</div>
+<div id="ss-build" style="position:fixed;left:8px;bottom:calc(env(safe-area-inset-bottom,0px) + 8px);z-index:99999;font:700 11px system-ui,sans-serif;color:#D4A843;opacity:.75;pointer-events:none;letter-spacing:.5px;">v22</div>
 <script>/*SheetSnap cloud sync — dedicated SheetSnap Firebase project (sheetsnap-fb659)*/
 (function(){
  var FB="https://www.gstatic.com/firebasejs/10.12.2/";
