@@ -1108,33 +1108,34 @@ function EditableValue({
   };
   const str = String(value == null ? "" : value);
   const longText = str.length > 90 || str.indexOf("\n") >= 0;
-  if (ed && longText) return /*#__PURE__*/React.createElement("textarea", {
+  const cancelEdit = () => { setD(value); setEd(false); if (onClose) onClose(); };
+  if (ed && longText) return ReactDOM.createPortal(/*#__PURE__*/React.createElement("div", {
+    style: { position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 100500, background: T.bg, display: "flex", flexDirection: "column", paddingTop: "calc(env(safe-area-inset-top, 0px) + 12px)", paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)" }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "4px 18px 10px", borderBottom: `1px solid ${T.borderLight}` }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: { fontSize: 16, fontWeight: 700, color: T.accent, fontFamily: "'Cinzel',Georgia,serif", letterSpacing: 1 }
+  }, "Writing View"), /*#__PURE__*/React.createElement("span", {
+    style: { fontSize: 12, color: T.textMuted }
+  }, String(d == null ? "" : d).length + " characters")), /*#__PURE__*/React.createElement("textarea", {
     ref: r,
     value: d,
     onChange: e => setD(e.target.value),
-    onInput: e => { e.target.style.height = "auto"; e.target.style.height = e.target.scrollHeight + "px"; },
-    onBlur: commit,
+    onKeyDown: e => { if (e.key === "Escape") cancelEdit(); },
     translate: noTranslate ? "no" : undefined,
-    style: {
-      colorScheme: kbScheme(T),
-      fontSize: 17,
-      lineHeight: 1.7,
-      fontWeight: 500,
-      color: T.text,
-      background: T.accentFaint,
-      border: `1px solid ${T.borderLight}`,
-      borderRadius: 8,
-      padding: "10px 12px",
-      outline: "none",
-      width: "100%",
-      boxSizing: "border-box",
-      fontFamily: "'EB Garamond',Georgia,serif",
-      whiteSpace: "pre-wrap",
-      resize: "vertical",
-      minHeight: 96,
-      display: "block"
-    }
-  });
+    "aria-label": "Edit text",
+    style: { colorScheme: kbScheme(T), flex: 1, width: "100%", boxSizing: "border-box", fontSize: 18, lineHeight: 1.85, fontWeight: 500, color: T.text, background: "transparent", border: "none", outline: "none", padding: "16px 18px", fontFamily: "'EB Garamond',Georgia,serif", whiteSpace: "pre-wrap", resize: "none" }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: { display: "flex", gap: 10, padding: "12px 18px 0", borderTop: `1px solid ${T.borderLight}` }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: cancelEdit,
+    className: "ss-press",
+    style: { flex: 1, minHeight: 46, background: "none", border: `1px solid ${T.borderLight}`, borderRadius: 10, cursor: "pointer", fontSize: 15, color: T.textSoft, fontFamily: "'Cinzel',Georgia,serif" }
+  }, "Cancel"), /*#__PURE__*/React.createElement("button", {
+    onClick: commit,
+    className: "ss-press",
+    style: { flex: 2, minHeight: 46, background: T.metalGrad, border: "none", borderRadius: 10, cursor: "pointer", fontSize: 15, fontWeight: 700, color: T.bg, fontFamily: "'Cinzel',Georgia,serif" }
+  }, "\u2713 Save"))), document.body);
   if (ed) return /*#__PURE__*/React.createElement("input", {
     ref: r,
     value: d,
@@ -1181,6 +1182,18 @@ function EditableValue({
     dispStyle.fontWeight = 500;
     dispStyle.wordBreak = "break-word";
     dispStyle.textAlign = "left";
+  }
+  if (longText) {
+    const paras = str.split(/\n+/).filter(p => p.trim().length);
+    dispStyle.lineHeight = 1.85;
+    return /*#__PURE__*/React.createElement("span", {
+      onClick: field ? undefined : () => setEd(true),
+      translate: noTranslate ? "no" : undefined,
+      style: dispStyle
+    }, paras.length ? paras.map((p, i) => /*#__PURE__*/React.createElement("span", {
+      key: i,
+      style: { display: "block", marginBottom: i === paras.length - 1 ? 0 : 12 }
+    }, p)) : placeholder || (field ? "—" : "Tap to edit"));
   }
   return /*#__PURE__*/React.createElement("span", {
     onClick: field ? undefined : () => setEd(true),
@@ -1543,7 +1556,7 @@ function HomeScreen({
       marginTop: 4,
       letterSpacing: 1
     }
-  }, "SheetSnap · build v26"))), /*#__PURE__*/React.createElement("button", {
+  }, "SheetSnap · build v27"))), /*#__PURE__*/React.createElement("button", {
     onClick: () => setShowHelp(false),
     className: "ss-press",
     style: {
@@ -2254,7 +2267,7 @@ function CaptureScreen({
       margin: 0,
       lineHeight: 1.5
     }
-  }, images.length === 0 ? "Add photos of your character sheet pages. Any system, any format. Up to " + MAX_PAGES + " pages per character." : images.length >= MAX_PAGES ? `Maximum of ${MAX_PAGES} pages reached. Tap Scan when ready.` : `${images.length} ${images.length === 1 ? "page" : "pages"} added. Add more or tap Scan when ready.`), capNotice && /*#__PURE__*/React.createElement("p", {
+  }, images.length === 0 ? "Add photos of your character sheet pages — any game, any system. Up to " + MAX_PAGES + " pages, which covers even the thickest character binder." : images.length >= MAX_PAGES ? `All ${MAX_PAGES} pages loaded — that's the full binder. Tap Scan when ready.` : `${images.length} ${images.length === 1 ? "page" : "pages"} added. Add more or tap Scan when ready.`), capNotice && /*#__PURE__*/React.createElement("p", {
     style: {
       fontSize: 14,
       color: T.yellow,
@@ -2262,7 +2275,7 @@ function CaptureScreen({
       lineHeight: 1.4,
       fontWeight: 600
     }
-  }, "\u26A0 A character scan is limited to ", MAX_PAGES, " pages. Extra pages were not added.")), images.length > 0 && /*#__PURE__*/React.createElement("div", {
+  }, "One scan holds up to ", MAX_PAGES, " pages, so the extra photos weren't added. Anything missing is easy to add by hand afterward.")), images.length > 0 && /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       gap: 10,
@@ -4875,7 +4888,7 @@ function CharacterScreen({
     style: {
       color: T.green
     }
-  }, "green"), " means it was read clearly."), /*#__PURE__*/React.createElement("div", null, hb(T, "Search"), " — Use the ", hb(T, "Search this character…"), " box on the hub to find anything instantly — a field name, a value, a section name, even a journal note. Type one word or several; matches are ranked with the closest on top and your words highlighted. Tap a result to jump straight to it, or tap ", hb(T, "✕ Close"), " (or the ✕ in the box) to clear the search."), /*#__PURE__*/React.createElement("div", null, hb(T, "Editing a field"), " — Tap the ", hb(T, "⋮"), " next to a field, then ", hb(T, "Edit"), ", to change its name or value. Requiring Edit first keeps you from changing things by accident while scrolling. The same ⋮ menu also has ", hb(T, "Move up / down"), ", ", hb(T, "Move to section…"), " (to send a field to a different group), and ", hb(T, "Delete"), " — and a deleted field can be brought back with ", hb(T, "Undo"), "."), /*#__PURE__*/React.createElement("div", null, hb(T, "Adding"), " — Use ", hb(T, "+ Add Field"), " at the bottom of any section, or the ", hb(T, "+ Add Section"), " card on the hub."), /*#__PURE__*/React.createElement("div", null, hb(T, "Portrait"), " — Tap ", hb(T, "Adjust photo"), " under the portrait to drag it, pinch or use ± to zoom, or replace it. Tap ", hb(T, "✓ Done"), " to lock it so it won't move while you scroll."), /*#__PURE__*/React.createElement("div", null, hb(T, "Themes"), " — The colored circles in the top bar restyle the whole sheet."), /*#__PURE__*/React.createElement("div", null, hb(T, "Journal"), " — Open the ", hb(T, "Journal"), " card to jot session notes as you play, and to retire (archive) the character when you're done with it."), /*#__PURE__*/React.createElement("div", null, hb(T, "Export & Share"), " — On the hub, ", hb(T, "⤓ Export / Share Sheet"), " opens a clean, printable copy you can save as a PDF or share; ", hb(T, "⬇ Backup file (.json)"), " saves a data backup you can re-import later."), /*#__PURE__*/React.createElement("div", null, hb(T, "Auto-saved"), " — Your changes save automatically, and an ", hb(T, "Undo"), " button appears after any edit."))), /*#__PURE__*/React.createElement("button", {
+  }, "green"), " means it was read clearly."), /*#__PURE__*/React.createElement("div", null, hb(T, "Search"), " — Use the ", hb(T, "Search this character…"), " box on the hub to find anything instantly — a field name, a value, a section name, even a journal note. Type one word or several; matches are ranked with the closest on top and your words highlighted. Tap a result to jump straight to it, or tap ", hb(T, "✕ Close"), " (or the ✕ in the box) to clear the search."), /*#__PURE__*/React.createElement("div", null, hb(T, "Editing a field"), " — Tap the ", hb(T, "⋮"), " next to a field, then ", hb(T, "Edit"), ", to change its name or value — longer text opens in a full-page writing view so you have room to work. Requiring Edit first keeps you from changing things by accident while scrolling. The same ⋮ menu also has ", hb(T, "Move up / down"), ", ", hb(T, "Move to section…"), " (to send a field to a different group), and ", hb(T, "Delete"), " — and a deleted field can be brought back with ", hb(T, "Undo"), "."), /*#__PURE__*/React.createElement("div", null, hb(T, "Adding"), " — Use ", hb(T, "+ Add Field"), " at the bottom of any section, or the ", hb(T, "+ Add Section"), " card on the hub."), /*#__PURE__*/React.createElement("div", null, hb(T, "Portrait"), " — Tap ", hb(T, "Adjust photo"), " under the portrait to drag it, pinch or use ± to zoom, or replace it. Tap ", hb(T, "✓ Done"), " to lock it so it won't move while you scroll."), /*#__PURE__*/React.createElement("div", null, hb(T, "Themes"), " — The colored circles in the top bar restyle the whole sheet."), /*#__PURE__*/React.createElement("div", null, hb(T, "Journal"), " — Open the ", hb(T, "Journal"), " card to jot session notes as you play, and to retire (archive) the character when you're done with it."), /*#__PURE__*/React.createElement("div", null, hb(T, "Export & Share"), " — On the hub, ", hb(T, "⤓ Export / Share Sheet"), " opens a clean, printable copy you can save as a PDF or share; ", hb(T, "⬇ Backup file (.json)"), " saves a data backup you can re-import later."), /*#__PURE__*/React.createElement("div", null, hb(T, "Auto-saved"), " — Your changes save automatically, and an ", hb(T, "Undo"), " button appears after any edit."))), /*#__PURE__*/React.createElement("button", {
     onClick: () => setShowHelp(false),
     className: "ss-press",
     style: {
@@ -5726,7 +5739,7 @@ function CharacterScreen({
     onKeyDown: e => {
       if (e.key === "Enter") addNote();
     },
-    placeholder: "Add a session note...",
+    placeholder: "Add a session note…",
     style: {
       flex: 1,
       fontSize: 15,
