@@ -50,9 +50,9 @@ input,button{font-family:inherit}
 @keyframes ssScan{0%{top:0}100%{top:calc(100% - 3px)}}
 @keyframes ssCatIn{from{opacity:0;transform:translateX(16px)}to{opacity:1;transform:translateX(0)}}
 #root input,#root textarea,#root select,#root [contenteditable="true"]{-webkit-user-select:text;-moz-user-select:text;user-select:text;-webkit-touch-callout:default}
-#ssInstall{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 18px);transform:translateX(-50%);z-index:9000;display:none;align-items:center;gap:8px;padding:11px 20px;border:1px solid #D4A843;border-radius:24px;background:linear-gradient(135deg,#1a1620,#0A0A0C);color:#D4A843;font-family:'Cinzel',Georgia,serif;font-size:14px;font-weight:700;letter-spacing:.5px;cursor:pointer;box-shadow:0 6px 22px rgba(0,0,0,.5),0 0 14px rgba(212,168,67,.25)}
-#ssInstall.show{display:inline-flex;animation:ssRise .35s ease}
-#ssInstall:active{transform:translateX(-50%) scale(.97)}
+
+
+
 #ssToast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 18px);transform:translateX(-50%);z-index:9001;display:none;max-width:88%;padding:12px 18px;border:1px solid #D4A843;border-radius:14px;background:#15131a;color:#F2E8D4;font-family:'EB Garamond',Georgia,serif;font-size:14px;text-align:center;cursor:pointer;box-shadow:0 6px 22px rgba(0,0,0,.55)}
 #ssToast.show{display:block;animation:ssRise .35s ease}
 #ssUpdate{position:fixed;left:50%;top:calc(env(safe-area-inset-top,0px) + 10px);transform:translateX(-50%);z-index:9100;display:none;align-items:center;gap:8px;max-width:92%;padding:10px 16px;border:1px solid #D4A843;border-radius:14px;background:linear-gradient(135deg,#1a1620,#0A0A0C);color:#F2E8D4;font-family:'Cinzel',Georgia,serif;font-size:14px;font-weight:700;letter-spacing:.3px;cursor:pointer;box-shadow:0 6px 22px rgba(0,0,0,.55),0 0 16px rgba(212,168,67,.3)}
@@ -64,7 +64,6 @@ input,button{font-family:inherit}
 </head>
 <body>
 <div id="root"></div>
-<button id="ssInstall" type="button" aria-label="Install SheetSnap as an app">⤓ Install SheetSnap</button>
 <div id="ssToast" role="status" aria-live="polite"></div>
 <div id="ssUpdate" role="alert"><span>Update available</span><span class="pill">Tap to refresh</span></div>
 <script>/**
@@ -833,7 +832,7 @@ const Footer = ({
 }) => /*#__PURE__*/React.createElement("div", {
   style: {
     textAlign: "center",
-    padding: "24px 0 8px"
+    padding: "24px 0 calc(env(safe-area-inset-bottom, 0px) + 88px)"
   }
 }, /*#__PURE__*/React.createElement("div", {
   style: {
@@ -1438,6 +1437,7 @@ function HomeScreen({
   const [showFallen, setShowFallen] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const importRef = useRef(null);
+  const [importNote, setImportNote] = useState(null);
   const handleImport = e => {
     const f = e.target.files[0];
     if (!f) return;
@@ -1446,9 +1446,14 @@ function HomeScreen({
       try {
         const c = JSON.parse(ev.target.result);
         if (c.name && c.sections) {
+          setImportNote(null);
           onImport(c);
+        } else {
+          setImportNote("Hmm — that file doesn't look like a SheetSnap character backup. Try the .json file you exported from SheetSnap.");
         }
-      } catch (err) {}
+      } catch (err) {
+        setImportNote("Hmm — that file doesn't look like a SheetSnap character backup. Try the .json file you exported from SheetSnap.");
+      }
     };
     r.readAsText(f);
     e.target.value = "";
@@ -1529,7 +1534,16 @@ function HomeScreen({
       color: T.textSoft,
       lineHeight: 1.6
     }
-  }, /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", null, hb(T, "Scan a character"), " — Tap ", hb(T, "Take Photos"), " to photograph your paper sheet, or ", hb(T, "Upload from Device"), " to pick images you already have. The AI reads the pages into a digital character you can edit."), /*#__PURE__*/React.createElement("div", null, hb(T, "Open a character"), " — Tap any character under Your Characters to view and edit it."), /*#__PURE__*/React.createElement("div", null, hb(T, "Retire / Delete"), " — Each character has ", hb(T, "Retire"), " (moves it to Fallen Heroes, where you can restore it later) and ", hb(T, "Delete"), " (removes it for good)."), /*#__PURE__*/React.createElement("div", null, hb(T, "Cloud Sync"), " — Tap the cloud button (top-right) and sign in with Google or Apple to back up your characters and sync them across your devices. The button shows your status — Syncing, Synced, or Offline — and your saves stay safe across app updates."), /*#__PURE__*/React.createElement("div", null, hb(T, "Install the app"), " — Tap ", hb(T, "Install SheetSnap"), " to add it to your home screen. It then opens like a normal app and works offline."), /*#__PURE__*/React.createElement("div", null, hb(T, "Themes"), " — The colored circles in the top bar restyle the app. Pick one that fits your character."), /*#__PURE__*/React.createElement("div", null, hb(T, "Help anytime"), " — Tap the ? on any screen to reopen this guide."))), /*#__PURE__*/React.createElement("button", {
+  }, /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", null, hb(T, "Scan a character"), " — Tap ", hb(T, "Take Photos"), " to photograph your paper sheet, or ", hb(T, "Upload from Device"), " to pick images you already have. The AI reads the pages into a digital character you can edit."), /*#__PURE__*/React.createElement("div", null, hb(T, "Open a character"), " — Tap any character under Your Characters to view and edit it."), /*#__PURE__*/React.createElement("div", null, hb(T, "Retire / Delete"), " — Each character has ", hb(T, "Retire"), " (moves it to Fallen Heroes, where you can restore it later) and ", hb(T, "Delete"), " (removes it for good)."), /*#__PURE__*/React.createElement("div", null, hb(T, "Cloud Sync"), " — Tap the cloud button (bottom-right) and sign in with Google to back up your characters and sync them across your devices. The button shows your status — Syncing, Synced, or Offline — and your saves stay safe across app updates."), /*#__PURE__*/React.createElement("div", null, hb(T, "Themes"), " — The colored circles in the top bar restyle the app. Pick one that fits your character."), /*#__PURE__*/React.createElement("div", null, hb(T, "Help anytime"), " — Tap the ? on any screen to reopen this guide."), /*#__PURE__*/React.createElement("div", {
+    style: {
+      textAlign: "center",
+      fontSize: 11,
+      color: T.textMuted,
+      opacity: 0.75,
+      marginTop: 4,
+      letterSpacing: 1
+    }
+  }, "SheetSnap · build v26"))), /*#__PURE__*/React.createElement("button", {
     onClick: () => setShowHelp(false),
     className: "ss-press",
     style: {
@@ -1972,7 +1986,18 @@ function HomeScreen({
       fontSize: 15,
       color: T.textSoft
     }
-  }, "\u2B06 Import Character from Backup")), fallenHeroes.length > 0 && /*#__PURE__*/React.createElement("div", {
+  }, "\u2B06 Import Character from Backup")), importNote && /*#__PURE__*/React.createElement("div", {
+    role: "status",
+    style: {
+      textAlign: "center",
+      fontSize: 13,
+      lineHeight: 1.5,
+      color: T.yellow,
+      padding: "10px 14px",
+      border: `1px dashed ${T.yellow}66`,
+      borderRadius: 10
+    }
+  }, importNote), fallenHeroes.length > 0 && /*#__PURE__*/React.createElement("div", {
     style: {
       marginTop: 12
     }
@@ -2098,11 +2123,7 @@ function HomeScreen({
       alignItems: "center"
     },
     title: "Delete"
-  }, "\u2715"))))), /*#__PURE__*/React.createElement(Ornament, {
-    T: T,
-    width: "30%",
-    spacing: "12px auto 0"
-  }))), /*#__PURE__*/React.createElement(Footer, {
+  }, "\u2715"))))), null)), /*#__PURE__*/React.createElement(Footer, {
     T: T
   }));
 }
@@ -2458,7 +2479,7 @@ function ProcessingScreen({
            unreadable value is forced to low confidence and shown as a clear
            "(unreadable)" flag so the user knows to fill it in from their sheet. */
         const isUnreadable = v => /^\s*unreadable\s*$/i.test(String(v ?? ""));
-        const UNREAD = "(unreadable)";
+        const UNREAD = "(couldn't read this)";
         const nameUnread = isUnreadable(parsed.name);
         parsed.name = nameUnread ? UNREAD : String(parsed.name || "Unknown Character");
         parsed.name_confidence = nameUnread || parsed.name_confidence === "low" ? "low" : "high";
@@ -2495,7 +2516,7 @@ function ProcessingScreen({
     label: "Building your digital character...",
     done: false
   }];
-  if (error) return /*#__PURE__*/React.createElement("div", {
+  if (error) { const eNet = /failed to fetch|network|load failed/i.test(String(error)); const eSrv = /^API \d|overloaded|rate.?limit/i.test(String(error)); return /*#__PURE__*/React.createElement("div", {
     style: {
       minHeight: "100vh",
       display: "flex",
@@ -2528,13 +2549,13 @@ function ProcessingScreen({
       lineHeight: 1.4,
       marginBottom: 6
     }
-  }, "Couldn't quite read that"), /*#__PURE__*/React.createElement("div", {
+  }, eNet ? "Couldn't reach the scanning service" : eSrv ? "Our scanner hit a snag" : "Couldn't quite read that"), /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 15,
       color: "#E8D9BE",
       lineHeight: 1.55
     }
-  }, "More light or a flatter, straight-on angle usually does the trick. Fill the frame with the sheet and hold steady — then give it another go."), /*#__PURE__*/React.createElement("div", {
+  }, eNet ? "Your photos are fine — this looks like a connection hiccup, not a bad shot. Check your signal and give it another try in a moment." : eSrv ? "Your photos are fine — our reader is just catching its breath. Give it another try in a minute." : "More light or a flatter, straight-on angle usually does the trick. Fill the frame with the sheet and hold steady — then give it another go."), /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 12,
       color: "#9A8B76",
@@ -2556,7 +2577,7 @@ function ProcessingScreen({
       color: T.text,
       position: "relative"
     }
-  }, "↺ Try again"));
+  }, "↺ Try again")); }
   return /*#__PURE__*/React.createElement("div", {
     style: {
       minHeight: "100vh",
@@ -3446,14 +3467,7 @@ function ScanCheck({
     }, /*#__PURE__*/React.createElement(Dot, {
       c: "low",
       T: T
-    }), " Needs a check")), /*#__PURE__*/React.createElement("div", {
-      style: {
-        textAlign: "center",
-        fontSize: 12,
-        color: T.textMuted,
-        marginTop: 9
-      }
-    }, totalFields + " fields · " + secCount + " sections"));
+    }), " Needs a check")));
   }
   return /*#__PURE__*/React.createElement("div", {
     style: {
@@ -3493,14 +3507,7 @@ function ScanCheck({
       color: T.green,
       lineHeight: 1.3
     }
-  }, "Scan verified — all " + totalFields + " fields look good")), /*#__PURE__*/React.createElement("div", {
-    style: {
-      textAlign: "center",
-      fontSize: 12,
-      color: T.textMuted,
-      marginTop: 9
-    }
-  }, totalFields + " fields · " + secCount + " sections"));
+  }, "Scan verified — all " + totalFields + " fields look good")));
 }
 function VerifyModal({
   T,
@@ -5156,7 +5163,7 @@ function CharacterScreen({
       color: T.nameColor || T.text,
       animation: "nameGlow 4s ease-in-out infinite alternate"
     }
-  }), /*#__PURE__*/React.createElement(Dot, {
+  }), data.name_confidence === "low" && /*#__PURE__*/React.createElement(Dot, {
     c: data.name_confidence,
     T: T
   }))), /*#__PURE__*/React.createElement("div", {
@@ -5177,7 +5184,7 @@ function CharacterScreen({
       letterSpacing: 2,
       textTransform: "uppercase"
     }
-  }), /*#__PURE__*/React.createElement(Dot, {
+  }), data.system_confidence === "low" && /*#__PURE__*/React.createElement(Dot, {
     c: data.system_confidence,
     T: T,
     s: {
@@ -5978,7 +5985,7 @@ function SheetSnap() {
   const handleSaveChar = d => {
     if (activeIsFallen) setFallenHeroes(p => p.map((c, i) => i === activeCharIdx ? d : c));else setCharacters(p => p.map((c, i) => i === activeCharIdx ? d : c));
   };
-  const handleDeleteChar = idx => { const c = characters[idx]; const nm = c ? (c.name || "this character") : "this character"; askAppConfirm("Delete character?", "Are you sure? All content for X will be permanently deleted.", () => setCharacters(p => p.filter((_, i) => i !== idx))); };
+  const handleDeleteChar = idx => { const c = characters[idx]; const nm = c ? (c.name || "this character") : "this character"; askAppConfirm("Delete character?", "Are you sure? All content for “" + nm + "” will be permanently deleted.", () => setCharacters(p => p.filter((_, i) => i !== idx))); };
   const handleArchiveChar = idx => {
     const c = characters[idx];
     setFallenHeroes(p => [...p, {
@@ -5995,7 +6002,7 @@ function SheetSnap() {
     setCharacters(p => [...p, c]);
     setFallenHeroes(p => p.filter((_, i) => i !== idx));
   };
-  const handleDeleteFallen = idx => { const c = fallenHeroes[idx]; const nm = c ? (c.name || "this character") : "this character"; askAppConfirm("Delete character?", "Are you sure? will be permanently deleted from Fallen Heroes.", () => setFallenHeroes(p => p.filter((_, i) => i !== idx))); };
+  const handleDeleteFallen = idx => { const c = fallenHeroes[idx]; const nm = c ? (c.name || "this character") : "this character"; askAppConfirm("Delete character?", "Are you sure? “" + nm + "” will be permanently deleted from Fallen Heroes.", () => setFallenHeroes(p => p.filter((_, i) => i !== idx))); };
   const handleImport = charData => {
     const nc = [...characters, charData];
     setCharacters(nc);
@@ -6077,13 +6084,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(/*#__PURE__*/React.c
 <script>
 /* SheetSnap PWA chassis — install prompt, update flow, service worker. */
 (function(){
-  var deferred=null, btn=document.getElementById('ssInstall');
-  window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();deferred=e;if(btn)btn.classList.add('show');});
-  if(btn)btn.addEventListener('click',function(){
-    if(!deferred)return; btn.classList.remove('show'); var d=deferred; deferred=null;
-    d.prompt(); if(d.userChoice){d.userChoice.catch(function(){});}
-  });
-  window.addEventListener('appinstalled',function(){deferred=null;if(btn)btn.classList.remove('show');});
+  window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();}); // store-only distribution: suppress browser install UI
   function showUpdate(onTap){var u=document.getElementById('ssUpdate');if(!u){return showToast('New version available — tap to update.',onTap);}u.classList.add('show');u.onclick=function(){u.querySelector('span').textContent='Updating…';if(onTap)onTap();};}
   function showToast(msg,onTap){var t=document.getElementById('ssToast');if(!t)return;
     t.textContent=msg;t.classList.add('show');
@@ -6112,7 +6113,6 @@ ReactDOM.createRoot(document.getElementById('root')).render(/*#__PURE__*/React.c
 })();
 </script>
 <button id="ss-sync-btn" aria-label="Cloud sync" style="position:fixed;right:12px;bottom:calc(env(safe-area-inset-bottom,0px) + 12px);z-index:99999;min-height:40px;padding:.5rem .8rem;border:1px solid #D4A843;border-radius:20px;background:#0A0A0C;color:#D4A843;font:600 13px 'Josefin Sans',system-ui,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.4);cursor:pointer;">&#9729; Sign in to sync</button>
-<div id="ss-build" style="position:fixed;left:8px;bottom:calc(env(safe-area-inset-bottom,0px) + 8px);z-index:99999;font:700 11px system-ui,sans-serif;color:#D4A843;opacity:.75;pointer-events:none;letter-spacing:.5px;">v25</div>
 <script>/*SheetSnap cloud sync — dedicated SheetSnap Firebase project (sheetsnap-fb659)*/
 (function(){
  var FB="https://www.gstatic.com/firebasejs/10.12.2/";
@@ -6126,12 +6126,12 @@ ReactDOM.createRoot(document.getElementById('root')).render(/*#__PURE__*/React.c
   var appM=m[0],authM=m[1],fsM=m[2];
   var app=appM.initializeApp(cfg),auth=authM.getAuth(app),db=fsM.getFirestore(app);
   var provider=new authM.GoogleAuthProvider();
-  var user=null,last="",timer=null,syncing=false,lastSyncedAt=0;
+  var user=null,last="",timer=null,syncing=false,lastSyncedAt=0,errState=false;
   function relTime(ts){if(!ts)return"just now";var s=Math.floor((Date.now()-ts)/1000);if(s<10)return"just now";if(s<60)return s+"s ago";var m=Math.floor(s/60);if(m<60)return m+"m ago";var h=Math.floor(m/60);if(h<24)return h+"h ago";return Math.floor(h/24)+"d ago";}
-  function render(){if(!btn)return;if(!user){setS("&#9729; Sign in to sync");return;}if(!navigator.onLine){setS("&#9888; Offline &middot; will sync");return;}if(syncing){setS("&#9729; Syncing&hellip;");return;}setS("&#10003; Synced &middot; "+relTime(lastSyncedAt));}
+  function render(){if(!btn)return;if(!user){setS("&#9729; Sign in to sync");return;}if(!navigator.onLine){setS("&#9888; Offline &middot; will sync");return;}if(syncing){setS("&#9729; Syncing&hellip;");return;}if(errState){setS("&#9888; Couldn't sync &middot; tap to retry");return;}setS("&#10003; Synced &middot; "+relTime(lastSyncedAt));}
   function ref(uid){return fsM.doc(db,"users",uid);}
-  function push(){if(!user)return;var s=JSON.stringify(gather());if(s===last)return;last=s;syncing=true;render();fsM.setDoc(ref(user.uid),{sheetsnap_blob:s,sheetsnap_updatedAt:Date.now()},{merge:true}).then(function(){lastSyncedAt=Date.now();syncing=false;render();}).catch(function(){syncing=false;render();});}
-  if(btn)btn.onclick=function(){if(user){authM.signOut(auth);}else{setS("&#9729; Opening Google sign-in&hellip;");authM.signInWithPopup(auth,provider).catch(function(){setS("&#9729; Sign-in didn't finish &mdash; tap to retry");});}};
+  function push(){if(!user)return;var s=JSON.stringify(gather());if(s===last)return;last=s;syncing=true;render();fsM.setDoc(ref(user.uid),{sheetsnap_blob:s,sheetsnap_updatedAt:Date.now()},{merge:true}).then(function(){lastSyncedAt=Date.now();syncing=false;errState=false;render();}).catch(function(){syncing=false;errState=true;last="";render();});}
+  if(btn)btn.onclick=function(){if(user&&errState){errState=false;last="";render();push();return;}if(user){authM.signOut(auth);}else{setS("&#9729; Opening Google sign-in&hellip;");authM.signInWithPopup(auth,provider).catch(function(){setS("&#9729; Sign-in didn't finish &mdash; tap to retry");});}};
   authM.onAuthStateChanged(auth,function(u){
    user=u;
    if(u){
